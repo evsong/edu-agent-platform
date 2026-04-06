@@ -7,7 +7,41 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { CopilotKit } from "@copilotkit/react-core";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { MobileTabBar } from "@/components/shared/MobileTabBar";
 import "@copilotkit/react-ui/styles.css";
+
+const studentTabs = [
+  {
+    href: "/s/courses",
+    icon: "ri-book-open-line",
+    activeIcon: "ri-book-open-fill",
+    label: "课程",
+  },
+  {
+    href: "/s/chat",
+    icon: "ri-chat-smile-3-line",
+    activeIcon: "ri-chat-smile-3-fill",
+    label: "答疑",
+  },
+  {
+    href: "/s/assignments",
+    icon: "ri-file-edit-line",
+    activeIcon: "ri-file-edit-fill",
+    label: "作业",
+  },
+  {
+    href: "/s/practice",
+    icon: "ri-lightning-line",
+    activeIcon: "ri-lightning-fill",
+    label: "练习",
+  },
+  {
+    href: "/s/profile",
+    icon: "ri-user-line",
+    activeIcon: "ri-user-fill",
+    label: "我的",
+  },
+];
 
 interface NavItem {
   href: string;
@@ -31,7 +65,7 @@ function StudentNavbar() {
       initial={{ y: -20, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ type: "spring", stiffness: 400, damping: 30 }}
-      className="sticky top-0 z-40 flex h-14 items-center border-b border-ink-border bg-white/80 backdrop-blur-md px-6"
+      className="sticky top-0 z-40 flex h-14 items-center border-b border-ink-border bg-white/80 backdrop-blur-md px-3 md:px-6"
     >
       {/* Logo */}
       <Link href="/s/courses" className="flex items-center gap-2 mr-8">
@@ -43,8 +77,8 @@ function StudentNavbar() {
         </span>
       </Link>
 
-      {/* Nav links */}
-      <nav className="flex items-center gap-1">
+      {/* Nav links - hidden on mobile, shown on md+ */}
+      <nav className="hidden md:flex items-center gap-1">
         {navItems.map((item) => {
           const isActive =
             pathname === item.href ||
@@ -116,7 +150,10 @@ export default function StudentLayout({
       <CopilotKit runtimeUrl="/api/copilotkit">
         <div className="min-h-screen bg-white">
           <StudentNavbar />
-          <main className="mx-auto max-w-6xl p-6">{children}</main>
+          <main className="mx-auto max-w-6xl px-4 py-4 pb-20 md:p-6 md:pb-6">
+            {children}
+          </main>
+          <MobileTabBar tabs={studentTabs} />
         </div>
       </CopilotKit>
     </QueryClientProvider>

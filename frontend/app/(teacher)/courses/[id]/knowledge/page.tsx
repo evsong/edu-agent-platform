@@ -133,9 +133,9 @@ export default function KnowledgeBasePage({
         <span className="text-ink-text font-medium">知识库</span>
       </nav>
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-heading font-bold text-ink-text">
+          <h1 className="text-xl sm:text-2xl font-heading font-bold text-ink-text">
             知识库管理
           </h1>
           <p className="mt-1 text-sm text-ink-text-muted">

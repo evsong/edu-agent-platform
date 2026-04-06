@@ -76,16 +76,16 @@ export default function CoursesPage() {
 
   return (
     <motion.div initial="hidden" animate="visible" variants={stagger} className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-heading font-bold text-ink-text">
+          <h1 className="text-xl sm:text-2xl font-heading font-bold text-ink-text">
             课程管理
           </h1>
           <p className="mt-1 text-sm text-ink-text-muted">
             管理你的所有课程与学习资源
           </p>
         </div>
-        <button className="inline-flex h-9 items-center gap-2 rounded-lg bg-ink-primary px-4 text-sm font-medium text-white transition-colors hover:bg-ink-primary-dark">
+        <button className="inline-flex h-9 items-center gap-2 rounded-lg bg-ink-primary px-4 text-sm font-medium text-white transition-colors hover:bg-ink-primary-dark self-start sm:self-auto">
           <i className="ri-add-line" />
           新建课程
         </button>

@@ -178,8 +178,8 @@ export default function WarningsPage() {
       </div>
 
       {/* Table */}
-      <div className="rounded-xl border border-ink-border bg-white overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="rounded-xl border border-ink-border bg-white overflow-x-auto">
+        <table className="w-full min-w-[600px] text-sm">
           <thead>
             <tr className="border-b border-ink-border bg-ink-surface">
               <th className="px-5 py-3 text-left font-medium text-ink-text-muted">

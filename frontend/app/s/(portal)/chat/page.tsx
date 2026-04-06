@@ -22,7 +22,7 @@ export default function ChatPage() {
       animate={{ opacity: 1, y: 0 }}
       transition={{ type: "spring", stiffness: 400, damping: 30 }}
       className="flex flex-col"
-      style={{ height: "calc(100vh - 14rem)" }}
+      style={{ height: "calc(100vh - 10rem)" }}
     >
       <div className="mb-4">
         <h1 className="text-2xl font-heading font-bold text-ink-text">

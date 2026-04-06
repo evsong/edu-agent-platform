@@ -139,7 +139,7 @@ export default function GradingDrawer({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="w-[70vw] sm:max-w-none overflow-y-auto"
+        className="w-full md:w-[70vw] sm:max-w-none overflow-y-auto"
         showCloseButton={true}
       >
         <SheetHeader className="border-b border-ink-border pb-4">

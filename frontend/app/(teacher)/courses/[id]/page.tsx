@@ -57,13 +57,13 @@ export default function CourseDetailPage({
       </nav>
 
       {/* Course Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-start gap-4">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-ink-primary-lighter text-ink-primary">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-ink-primary-lighter text-ink-primary">
             <i className={`${c.icon || "ri-book-open-line"} text-2xl`} />
           </div>
           <div>
-            <h1 className="text-2xl font-heading font-bold text-ink-text">
+            <h1 className="text-xl sm:text-2xl font-heading font-bold text-ink-text">
               {c.name}
             </h1>
             <p className="mt-1 text-sm text-ink-text-muted">{c.description}</p>
@@ -72,14 +72,14 @@ export default function CourseDetailPage({
         <div className="flex gap-2">
           <Link
             href={`/courses/${id}/knowledge`}
-            className="inline-flex h-9 items-center gap-2 rounded-lg border border-ink-border bg-white px-4 text-sm font-medium text-ink-text transition-colors hover:bg-ink-surface"
+            className="inline-flex h-9 items-center gap-2 rounded-lg border border-ink-border bg-white px-3 sm:px-4 text-sm font-medium text-ink-text transition-colors hover:bg-ink-surface"
           >
             <i className="ri-database-2-line text-ink-primary" />
             知识库
           </Link>
           <Link
             href={`/courses/${id}/analytics`}
-            className="inline-flex h-9 items-center gap-2 rounded-lg border border-ink-border bg-white px-4 text-sm font-medium text-ink-text transition-colors hover:bg-ink-surface"
+            className="inline-flex h-9 items-center gap-2 rounded-lg border border-ink-border bg-white px-3 sm:px-4 text-sm font-medium text-ink-text transition-colors hover:bg-ink-surface"
           >
             <i className="ri-line-chart-line text-ink-primary" />
             分析
@@ -140,8 +140,8 @@ export default function CourseDetailPage({
         </TabsContent>
 
         <TabsContent value="students" className="mt-6">
-          <div className="rounded-xl border border-ink-border bg-white overflow-hidden">
-            <table className="w-full text-sm">
+          <div className="rounded-xl border border-ink-border bg-white overflow-x-auto">
+            <table className="w-full min-w-[480px] text-sm">
               <thead>
                 <tr className="border-b border-ink-border bg-ink-surface">
                   <th className="px-4 py-3 text-left font-medium text-ink-text-muted">

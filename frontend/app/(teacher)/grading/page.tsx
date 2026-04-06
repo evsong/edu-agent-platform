@@ -148,9 +148,9 @@ export default function GradingQueuePage() {
       variants={stagger}
       className="space-y-6"
     >
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-heading font-bold text-ink-text">
+          <h1 className="text-xl sm:text-2xl font-heading font-bold text-ink-text">
             批改队列
           </h1>
           <p className="mt-1 text-sm text-ink-text-muted">
@@ -185,7 +185,7 @@ export default function GradingQueuePage() {
               <motion.div
                 key={sub.id}
                 variants={rowVariant}
-                className="flex items-center gap-4 px-5 py-4 cursor-pointer transition-colors hover:bg-ink-surface/50"
+                className="flex items-center gap-3 px-3 py-3 sm:gap-4 sm:px-5 sm:py-4 cursor-pointer transition-colors hover:bg-ink-surface/50"
                 onClick={() => router.push(`/grading/${sub.id}`)}
               >
                 {/* File icon */}
@@ -208,8 +208,8 @@ export default function GradingQueuePage() {
                   </p>
                 </div>
 
-                {/* Time */}
-                <span className="shrink-0 text-xs text-ink-text-light">
+                {/* Time - hidden on mobile */}
+                <span className="hidden sm:inline shrink-0 text-xs text-ink-text-light">
                   {formatTime(sub.submitted_at)}
                 </span>
 

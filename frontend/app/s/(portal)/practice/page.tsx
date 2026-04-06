@@ -215,13 +215,13 @@ export default function PracticePage() {
           <i className="ri-donut-chart-line mr-1.5 text-ink-primary" />
           知识点掌握度
         </h3>
-        <div className="flex items-center justify-center gap-6 flex-wrap">
+        <div className="flex items-center justify-center gap-4 sm:gap-6 flex-wrap">
           {knowledgePoints.map((kp) => (
             <EnergyRing
               key={kp.name}
               mastery={kp.mastery}
               label={kp.name}
-              size={80}
+              size={70}
             />
           ))}
         </div>

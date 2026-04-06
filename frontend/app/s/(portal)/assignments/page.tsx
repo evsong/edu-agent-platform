@@ -158,7 +158,7 @@ export default function AssignmentsPage() {
       </div>
 
       {/* Summary badges */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
         {(["pending", "submitted", "graded", "overdue"] as const).map(
           (status) => {
             const config = statusConfig[status];
@@ -188,7 +188,7 @@ export default function AssignmentsPage() {
               <motion.div key={asgn.id} variants={rowVariant}>
                 <Link
                   href={`/s/assignments/${asgn.id}`}
-                  className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-ink-surface/50"
+                  className="flex items-center gap-3 px-3 py-3 sm:gap-4 sm:px-5 sm:py-4 transition-colors hover:bg-ink-surface/50"
                 >
                   {/* Course icon */}
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-ink-primary-lighter">
@@ -210,10 +210,10 @@ export default function AssignmentsPage() {
                     </p>
                   </div>
 
-                  {/* Due date */}
+                  {/* Due date - hidden on small mobile */}
                   <span
                     className={cn(
-                      "shrink-0 text-xs",
+                      "hidden sm:inline shrink-0 text-xs",
                       asgn.status === "overdue"
                         ? "text-ink-error font-medium"
                         : "text-ink-text-light",

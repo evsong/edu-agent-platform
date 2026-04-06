@@ -63,9 +63,9 @@ export default function KnowledgeGraph({ data }: KnowledgeGraphProps) {
   );
 
   return (
-    <div className="relative h-[600px] w-full overflow-hidden rounded-2xl bg-[#0F172A]">
+    <div className="relative h-[300px] md:h-[600px] w-full overflow-hidden rounded-2xl bg-[#0F172A]">
       {/* Toolbar */}
-      <div className="absolute top-4 left-4 right-4 z-10 flex items-center gap-3">
+      <div className="absolute top-2 left-2 right-2 md:top-4 md:left-4 md:right-4 z-10 flex flex-wrap items-center gap-2 md:gap-3">
         <div className="relative flex-1 max-w-xs">
           <i className="ri-search-line absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <Input
@@ -121,8 +121,8 @@ export default function KnowledgeGraph({ data }: KnowledgeGraphProps) {
         enableNodeDrag={true}
         enableNavigationControls={true}
         numDimensions={is3D ? 3 : 2}
-        width={typeof window !== "undefined" ? window.innerWidth - 280 : 1000}
-        height={600}
+        width={typeof window !== "undefined" ? (window.innerWidth < 768 ? window.innerWidth - 32 : window.innerWidth - 280) : 1000}
+        height={typeof window !== "undefined" && window.innerWidth < 768 ? 300 : 600}
       />
 
       {/* Legend */}

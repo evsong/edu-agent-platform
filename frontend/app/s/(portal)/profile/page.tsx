@@ -190,8 +190,8 @@ export default function ProfilePage() {
             知识点雷达图
           </h2>
           <p className="text-xs text-ink-text-muted mb-4">各维度掌握程度</p>
-          <ResponsiveContainer width="100%" height={300}>
-            <RadarChart data={radarData} cx="50%" cy="50%" outerRadius="70%">
+          <ResponsiveContainer width="100%" height={250}>
+            <RadarChart data={radarData} cx="50%" cy="50%" outerRadius="65%">
               <PolarGrid stroke="#F3F4F6" />
               <PolarAngleAxis
                 dataKey="subject"
@@ -231,7 +231,7 @@ export default function ProfilePage() {
             掌握度趋势
           </h2>
           <p className="text-xs text-ink-text-muted mb-4">近 7 天平均掌握率</p>
-          <ResponsiveContainer width="100%" height={300}>
+          <ResponsiveContainer width="100%" height={250}>
             <LineChart data={data.mastery_history}>
               <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
               <XAxis
@@ -285,13 +285,13 @@ export default function ProfilePage() {
         <p className="text-xs text-ink-text-muted mb-5">
           BKT 模型实时计算的掌握概率
         </p>
-        <div className="flex flex-wrap items-center justify-center gap-6">
+        <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-6">
           {data.knowledge_points.map((kp) => (
             <EnergyRing
               key={kp.name}
               mastery={kp.mastery}
               label={kp.name}
-              size={90}
+              size={75}
             />
           ))}
         </div>
