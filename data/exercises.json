@@ -1,0 +1,362 @@
+[
+  {
+    "course_id": "math",
+    "knowledge_point_id": "MATH-LIMIT-001",
+    "question": "数列 aₙ = 1/n 的极限是",
+    "options": {"A": "0", "B": "1", "C": "∞", "D": "不存在"},
+    "answer": "A",
+    "difficulty": 1,
+    "explanation": "当 n→∞ 时，1/n→0，由极限定义可知 lim(1/n)=0。"
+  },
+  {
+    "course_id": "math",
+    "knowledge_point_id": "MATH-LIMIT-001",
+    "question": "数列 aₙ = (2n+1)/(3n-1) 的极限为",
+    "options": {"A": "1/3", "B": "2/3", "C": "1", "D": "3/2"},
+    "answer": "B",
+    "difficulty": 2,
+    "explanation": "分子分母同除以 n，得 (2+1/n)/(3-1/n)→2/3。"
+  },
+  {
+    "course_id": "math",
+    "knowledge_point_id": "MATH-LIMIT-001",
+    "question": "数列 aₙ = (-1)ⁿ/n 的极限是",
+    "options": {"A": "0", "B": "1", "C": "-1", "D": "不存在"},
+    "answer": "A",
+    "difficulty": 2,
+    "explanation": "|aₙ| = 1/n→0，由夹逼定理知 aₙ→0。"
+  },
+  {
+    "course_id": "math",
+    "knowledge_point_id": "MATH-LIMIT-002",
+    "question": "lim(x→0) sin(x)/x 的值为",
+    "options": {"A": "0", "B": "1", "C": "∞", "D": "-1"},
+    "answer": "B",
+    "difficulty": 2,
+    "explanation": "这是第一重要极限，lim(x→0) sin(x)/x = 1。"
+  },
+  {
+    "course_id": "math",
+    "knowledge_point_id": "MATH-LIMIT-002",
+    "question": "lim(x→∞) (1+1/x)^x 的值为",
+    "options": {"A": "1", "B": "e", "C": "∞", "D": "0"},
+    "answer": "B",
+    "difficulty": 3,
+    "explanation": "这是第二重要极限，lim(x→∞)(1+1/x)^x = e。"
+  },
+  {
+    "course_id": "math",
+    "knowledge_point_id": "MATH-DIFF-001",
+    "question": "函数 f(x) = x³ 在 x=2 处的导数为",
+    "options": {"A": "6", "B": "8", "C": "12", "D": "4"},
+    "answer": "C",
+    "difficulty": 2,
+    "explanation": "f'(x) = 3x²，f'(2) = 3×4 = 12。"
+  },
+  {
+    "course_id": "math",
+    "knowledge_point_id": "MATH-DIFF-001",
+    "question": "函数 f(x) = eˣsin(x) 的导数为",
+    "options": {"A": "eˣsin(x) + eˣcos(x)", "B": "eˣcos(x)", "C": "eˣsin(x)", "D": "eˣ(sin(x) - cos(x))"},
+    "answer": "A",
+    "difficulty": 3,
+    "explanation": "由乘积法则 f'(x) = eˣsin(x) + eˣcos(x) = eˣ(sin(x)+cos(x))。"
+  },
+  {
+    "course_id": "math",
+    "knowledge_point_id": "MATH-DIFF-001",
+    "question": "若 y = ln(2x+1)，则 dy/dx =",
+    "options": {"A": "1/(2x+1)", "B": "2/(2x+1)", "C": "2ln(2x+1)", "D": "1/(x+1)"},
+    "answer": "B",
+    "difficulty": 3,
+    "explanation": "由链式法则，dy/dx = 1/(2x+1) × 2 = 2/(2x+1)。"
+  },
+  {
+    "course_id": "math",
+    "knowledge_point_id": "MATH-CALC-001",
+    "question": "∫(3x² + 2x)dx =",
+    "options": {"A": "x³ + x² + C", "B": "6x + 2 + C", "C": "x³ + 2x + C", "D": "3x³ + x² + C"},
+    "answer": "A",
+    "difficulty": 2,
+    "explanation": "∫3x²dx = x³，∫2xdx = x²，合并得 x³+x²+C。"
+  },
+  {
+    "course_id": "math",
+    "knowledge_point_id": "MATH-CALC-001",
+    "question": "∫cos(2x)dx =",
+    "options": {"A": "sin(2x) + C", "B": "sin(2x)/2 + C", "C": "-sin(2x)/2 + C", "D": "2sin(2x) + C"},
+    "answer": "B",
+    "difficulty": 3,
+    "explanation": "令 u=2x，du=2dx，∫cos(u)·du/2 = sin(u)/2 + C = sin(2x)/2 + C。"
+  },
+  {
+    "course_id": "math",
+    "knowledge_point_id": "MATH-CALC-002",
+    "question": "求定积分 ∫₀² (3x²+1)dx 的值",
+    "options": {"A": "8", "B": "10", "C": "12", "D": "14"},
+    "answer": "B",
+    "difficulty": 3,
+    "explanation": "F(x) = x³+x，F(2)-F(0) = (8+2)-(0+0) = 10。"
+  },
+  {
+    "course_id": "math",
+    "knowledge_point_id": "MATH-CALC-002",
+    "question": "∫₀^π sin(x)dx =",
+    "options": {"A": "0", "B": "1", "C": "2", "D": "-2"},
+    "answer": "C",
+    "difficulty": 2,
+    "explanation": "[-cos(x)]₀^π = -cos(π)+cos(0) = 1+1 = 2。"
+  },
+  {
+    "course_id": "math",
+    "knowledge_point_id": "MATH-CALC-002",
+    "question": "∫₁^e (1/x)dx =",
+    "options": {"A": "0", "B": "1", "C": "e", "D": "1/e"},
+    "answer": "B",
+    "difficulty": 2,
+    "explanation": "[ln|x|]₁^e = ln(e) - ln(1) = 1 - 0 = 1。"
+  },
+  {
+    "course_id": "math",
+    "knowledge_point_id": "MATH-CALC-002",
+    "question": "∫₀¹ xeˣdx =",
+    "options": {"A": "1", "B": "e-1", "C": "e", "D": "2"},
+    "answer": "A",
+    "difficulty": 4,
+    "explanation": "分部积分：u=x, dv=eˣdx → [xeˣ]₀¹ - ∫₀¹eˣdx = e-(e-1) = 1。"
+  },
+  {
+    "course_id": "math",
+    "knowledge_point_id": "MATH-CALC-003",
+    "question": "若 ∫₀^a f(x)dx = 3，∫₀^a g(x)dx = 5，则 ∫₀^a [2f(x)+g(x)]dx =",
+    "options": {"A": "8", "B": "11", "C": "13", "D": "16"},
+    "answer": "B",
+    "difficulty": 2,
+    "explanation": "由定积分线性性质：2×3+5 = 11。"
+  },
+  {
+    "course_id": "math",
+    "knowledge_point_id": "MATH-CALC-003",
+    "question": "∫₀^3 f(x)dx = 7，∫₁^3 f(x)dx = 4，则 ∫₀^1 f(x)dx =",
+    "options": {"A": "3", "B": "4", "C": "7", "D": "11"},
+    "answer": "A",
+    "difficulty": 2,
+    "explanation": "由区间可加性：∫₀^1 = ∫₀^3 - ∫₁^3 = 7-4 = 3。"
+  },
+  {
+    "course_id": "math",
+    "knowledge_point_id": "MATH-SERIES-001",
+    "question": "等比级数 ∑(n=0→∞) (1/2)ⁿ 的和为",
+    "options": {"A": "1", "B": "2", "C": "1/2", "D": "∞"},
+    "answer": "B",
+    "difficulty": 2,
+    "explanation": "等比级数公式 S = a/(1-r) = 1/(1-1/2) = 2。"
+  },
+  {
+    "course_id": "math",
+    "knowledge_point_id": "MATH-SERIES-001",
+    "question": "调和级数 ∑(n=1→∞) 1/n 的敛散性为",
+    "options": {"A": "收敛", "B": "发散", "C": "条件收敛", "D": "振荡"},
+    "answer": "B",
+    "difficulty": 3,
+    "explanation": "调和级数发散，虽然通项趋于0但不满足收敛充分条件。"
+  },
+  {
+    "course_id": "math",
+    "knowledge_point_id": "MATH-SERIES-001",
+    "question": "用比值判别法判断 ∑ n!/nⁿ 的收敛性，比值极限为",
+    "options": {"A": "e", "B": "1/e", "C": "1", "D": "0"},
+    "answer": "B",
+    "difficulty": 4,
+    "explanation": "u(n+1)/uₙ = [nⁿ/(n+1)ⁿ] = [n/(n+1)]ⁿ → 1/e < 1，级数收敛。"
+  },
+  {
+    "course_id": "math",
+    "knowledge_point_id": "MATH-SERIES-002",
+    "question": "幂级数 ∑(n=1→∞) xⁿ/n 的收敛半径为",
+    "options": {"A": "0", "B": "1", "C": "e", "D": "∞"},
+    "answer": "B",
+    "difficulty": 4,
+    "explanation": "|aₙ/aₙ₊₁| = (n+1)/n → 1，故收敛半径 R=1。"
+  },
+  {
+    "course_id": "math",
+    "knowledge_point_id": "MATH-SERIES-002",
+    "question": "eˣ 的麦克劳林展开式的第 3 项（n=2）系数为",
+    "options": {"A": "1", "B": "1/2", "C": "1/6", "D": "1/24"},
+    "answer": "B",
+    "difficulty": 3,
+    "explanation": "eˣ = ∑xⁿ/n!，第 3 项 n=2 时系数为 1/2! = 1/2。"
+  },
+  {
+    "course_id": "math",
+    "knowledge_point_id": "MATH-VEC-001",
+    "question": "向量 a=(1,2,3) 与 b=(3,2,1) 的点积为",
+    "options": {"A": "10", "B": "6", "C": "14", "D": "8"},
+    "answer": "A",
+    "difficulty": 2,
+    "explanation": "a·b = 1×3 + 2×2 + 3×1 = 3+4+3 = 10。"
+  },
+  {
+    "course_id": "math",
+    "knowledge_point_id": "MATH-VEC-001",
+    "question": "向量 a=(1,0,0) 与 b=(0,1,0) 的叉积为",
+    "options": {"A": "(0,0,1)", "B": "(0,0,-1)", "C": "(1,1,0)", "D": "(0,0,0)"},
+    "answer": "A",
+    "difficulty": 3,
+    "explanation": "a×b = |i j k; 1 0 0; 0 1 0| = (0-0)i - (0-0)j + (1-0)k = (0,0,1)。"
+  },
+  {
+    "course_id": "math",
+    "knowledge_point_id": "MATH-DET-001",
+    "question": "二阶行列式 |2 3; 1 4| 的值为",
+    "options": {"A": "5", "B": "11", "C": "8", "D": "-5"},
+    "answer": "A",
+    "difficulty": 2,
+    "explanation": "2×4 - 3×1 = 8-3 = 5。"
+  },
+  {
+    "course_id": "math",
+    "knowledge_point_id": "MATH-DET-001",
+    "question": "三阶行列式 |1 2 3; 4 5 6; 7 8 9| 的值为",
+    "options": {"A": "0", "B": "6", "C": "-6", "D": "12"},
+    "answer": "A",
+    "difficulty": 4,
+    "explanation": "按第一行展开：1(45-48) - 2(36-42) + 3(32-35) = -3+12-9 = 0。也可观察第三行=第一行+第二行。"
+  },
+  {
+    "course_id": "physics",
+    "knowledge_point_id": "PHY-MECH-001",
+    "question": "质量 2 kg 的物体受 10 N 合力作用，加速度为",
+    "options": {"A": "2 m/s²", "B": "5 m/s²", "C": "10 m/s²", "D": "20 m/s²"},
+    "answer": "B",
+    "difficulty": 1,
+    "explanation": "由 F=ma，a = F/m = 10/2 = 5 m/s²。"
+  },
+  {
+    "course_id": "physics",
+    "knowledge_point_id": "PHY-MECH-001",
+    "question": "在光滑水平面上，对 5 kg 物体施加 20 N 水平力，3 s 后速度为",
+    "options": {"A": "4 m/s", "B": "8 m/s", "C": "12 m/s", "D": "15 m/s"},
+    "answer": "C",
+    "difficulty": 2,
+    "explanation": "a = F/m = 4 m/s²，v = at = 4×3 = 12 m/s。"
+  },
+  {
+    "course_id": "physics",
+    "knowledge_point_id": "PHY-MECH-001",
+    "question": "关于牛顿第三定律，以下说法正确的是",
+    "options": {"A": "作用力与反作用力可以抵消", "B": "作用力先于反作用力产生", "C": "作用力与反作用力大小相等方向相反", "D": "作用力与反作用力作用在同一物体上"},
+    "answer": "C",
+    "difficulty": 2,
+    "explanation": "牛顿第三定律：作用力与反作用力等大反向，作用在不同物体上，同时产生不可抵消。"
+  },
+  {
+    "course_id": "physics",
+    "knowledge_point_id": "PHY-MECH-002",
+    "question": "弹簧劲度系数 k=100 N/m，将弹簧拉伸 0.2 m，弹性势能为",
+    "options": {"A": "1 J", "B": "2 J", "C": "4 J", "D": "10 J"},
+    "answer": "B",
+    "difficulty": 3,
+    "explanation": "W = ∫₀^0.2 kx dx = ½kx² = ½×100×0.04 = 2 J。"
+  },
+  {
+    "course_id": "physics",
+    "knowledge_point_id": "PHY-MECH-002",
+    "question": "力 F(x) = 4x（N）将物体从 x=0 推到 x=3 m，做功为",
+    "options": {"A": "12 J", "B": "18 J", "C": "6 J", "D": "36 J"},
+    "answer": "B",
+    "difficulty": 3,
+    "explanation": "W = ∫₀³ 4x dx = 2x²|₀³ = 18 J。这是定积分在物理中的典型应用。"
+  },
+  {
+    "course_id": "physics",
+    "knowledge_point_id": "PHY-MECH-003",
+    "question": "质量 1 kg 的物体速度从 2 m/s 增加到 6 m/s，合外力做的功为",
+    "options": {"A": "8 J", "B": "16 J", "C": "18 J", "D": "32 J"},
+    "answer": "B",
+    "difficulty": 3,
+    "explanation": "由动能定理 W = ½mv₂²-½mv₁² = ½×1×(36-4) = 16 J。"
+  },
+  {
+    "course_id": "physics",
+    "knowledge_point_id": "PHY-MECH-003",
+    "question": "动能定理的积分形式 W=∫F dx=ΔEk 的推导需要用到",
+    "options": {"A": "牛顿第一定律", "B": "牛顿第二定律和定积分", "C": "动量守恒", "D": "能量守恒"},
+    "answer": "B",
+    "difficulty": 4,
+    "explanation": "W=∫F dx=∫ma dx=∫mv dv=½mv₂²-½mv₁²，需要牛顿第二定律 F=ma 和定积分的换元。"
+  },
+  {
+    "course_id": "physics",
+    "knowledge_point_id": "PHY-KIN-001",
+    "question": "质点运动方程 x(t)=3t²-2t+1（m），t=2 s 时的瞬时速度为",
+    "options": {"A": "8 m/s", "B": "10 m/s", "C": "12 m/s", "D": "6 m/s"},
+    "answer": "B",
+    "difficulty": 2,
+    "explanation": "v = dx/dt = 6t-2，代入 t=2 得 v=12-2=10 m/s。"
+  },
+  {
+    "course_id": "physics",
+    "knowledge_point_id": "PHY-KIN-001",
+    "question": "速度 v(t)=4t（m/s），从 t=0 到 t=3 s 的位移为",
+    "options": {"A": "12 m", "B": "18 m", "C": "6 m", "D": "36 m"},
+    "answer": "B",
+    "difficulty": 3,
+    "explanation": "x = ∫₀³ 4t dt = 2t²|₀³ = 18 m。位移是速度对时间的定积分。"
+  },
+  {
+    "course_id": "physics",
+    "knowledge_point_id": "PHY-KIN-002",
+    "question": "物体从静止开始以 2 m/s² 匀加速运动，4 s 后的位移为",
+    "options": {"A": "8 m", "B": "16 m", "C": "32 m", "D": "4 m"},
+    "answer": "B",
+    "difficulty": 2,
+    "explanation": "x = ½at² = ½×2×16 = 16 m。"
+  },
+  {
+    "course_id": "physics",
+    "knowledge_point_id": "PHY-KIN-002",
+    "question": "自由落体 2 s 后的速度为（g=10 m/s²）",
+    "options": {"A": "10 m/s", "B": "20 m/s", "C": "40 m/s", "D": "5 m/s"},
+    "answer": "B",
+    "difficulty": 1,
+    "explanation": "v = gt = 10×2 = 20 m/s。"
+  },
+  {
+    "course_id": "physics",
+    "knowledge_point_id": "PHY-KIN-002",
+    "question": "物体以 10 m/s 初速度竖直上抛（g=10 m/s²），达到最高点的时间为",
+    "options": {"A": "0.5 s", "B": "1 s", "C": "2 s", "D": "0.1 s"},
+    "answer": "B",
+    "difficulty": 2,
+    "explanation": "最高点 v=0，由 v=v₀-gt 得 t=v₀/g=10/10=1 s。"
+  },
+  {
+    "course_id": "physics",
+    "knowledge_point_id": "PHY-MOM-001",
+    "question": "3 kg 物体以 4 m/s 与静止的 1 kg 物体完全非弹性碰撞后，共同速度为",
+    "options": {"A": "1 m/s", "B": "2 m/s", "C": "3 m/s", "D": "4 m/s"},
+    "answer": "C",
+    "difficulty": 3,
+    "explanation": "由动量守恒：3×4 = (3+1)v，v = 12/4 = 3 m/s。"
+  },
+  {
+    "course_id": "physics",
+    "knowledge_point_id": "PHY-MOM-001",
+    "question": "关于动量守恒定律，以下条件正确的是",
+    "options": {"A": "系统不受任何力", "B": "系统合外力为零", "C": "系统内力为零", "D": "系统动能守恒"},
+    "answer": "B",
+    "difficulty": 2,
+    "explanation": "动量守恒的条件是系统所受合外力为零，内力可以不为零。"
+  },
+  {
+    "course_id": "physics",
+    "knowledge_point_id": "PHY-MOM-001",
+    "question": "质量 m 的子弹以速度 v 射入静止的质量 M 木块并嵌入其中，碰后系统速度为",
+    "options": {"A": "mv/(m+M)", "B": "Mv/(m+M)", "C": "v/2", "D": "(m+M)v/m"},
+    "answer": "A",
+    "difficulty": 3,
+    "explanation": "完全非弹性碰撞，由动量守恒 mv = (m+M)V，解得 V = mv/(m+M)。"
+  }
+]
