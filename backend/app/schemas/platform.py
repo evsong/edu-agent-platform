@@ -8,15 +8,22 @@ from pydantic import BaseModel
 
 
 class LTILaunchData(BaseModel):
-    iss: str
-    sub: str
-    aud: str
-    name: Optional[str] = None
-    email: Optional[str] = None
+    """Payload forwarded from the ltijs LTI provider on successful launch."""
+
+    user_id: str
+    course_id: str = "unknown"
     roles: list[str] = []
-    context_id: Optional[str] = None
-    context_title: Optional[str] = None
-    resource_link_id: Optional[str] = None
+    name: str = "Unknown"
+    email: str = ""
+    platform_info: Optional[dict[str, Any]] = None
+
+
+class LTIGradeRequest(BaseModel):
+    """Request body for LTI grade passback."""
+
+    user_id: str
+    score: float
+    comment: str = ""
 
 
 class DingTalkMessage(BaseModel):
@@ -26,7 +33,21 @@ class DingTalkMessage(BaseModel):
     at: Optional[dict[str, Any]] = None
 
 
-class XAPIStatement(BaseModel):
+class DingTalkNotifyRequest(BaseModel):
+    """Request body for sending a DingTalk notification."""
+
+    webhook_url: str
+    content: str
+
+
+class PlatformUserResolveRequest(BaseModel):
+    """Query params for resolving a platform user."""
+
+    platform: str
+    platform_user_id: str
+
+
+class XAPIStatementSchema(BaseModel):
     user_id: uuid.UUID
     verb: str
     object_type: str

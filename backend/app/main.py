@@ -11,6 +11,7 @@ from app.api.grading import router as grading_router
 from app.api.knowledge import router as knowledge_router
 from app.api.analytics import router as analytics_router
 from app.api.practice import router as practice_router
+from app.api.platform import router as platform_router
 
 
 @asynccontextmanager
@@ -47,6 +48,7 @@ app.include_router(grading_router)
 app.include_router(knowledge_router)
 app.include_router(analytics_router)
 app.include_router(practice_router)
+app.include_router(platform_router)
 
 
 @app.get("/health")

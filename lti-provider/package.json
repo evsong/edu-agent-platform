@@ -1,0 +1,10 @@
+{
+  "name": "eduagent-lti-provider",
+  "version": "1.0.0",
+  "main": "index.js",
+  "dependencies": {
+    "ltijs": "^5.9.9",
+    "axios": "^1.7.0",
+    "dotenv": "^16.4.0"
+  }
+}
