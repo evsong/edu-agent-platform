@@ -1,0 +1,21 @@
+/*
+ * EduAgent Chrome Extension
+ * Styles are injected via Shadow DOM in content.js for isolation.
+ * This file is intentionally minimal — only global overrides if needed.
+ */
+
+#eduagent-host {
+  /* Ensure the shadow host doesn't interfere with page layout */
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  overflow: visible;
+  z-index: 999999;
+  pointer-events: none;
+}
+
+#eduagent-host * {
+  pointer-events: auto;
+}

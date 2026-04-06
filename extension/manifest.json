@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "EduAgent AI 助教",
+  "version": "1.0.0",
+  "description": "在任意教学平台注入 AI 助教",
+  "permissions": ["activeTab"],
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.chaoxing.com/*",
+        "*://*.zhihuishu.com/*",
+        "*://*.mooc.chaoxing.com/*"
+      ],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}
