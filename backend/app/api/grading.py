@@ -1,0 +1,173 @@
+"""Grading API — submit for grading, retrieve results & annotations, manage rules."""
+
+from __future__ import annotations
+
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.database import get_db
+from app.models.assignment import Submission
+from app.services.grading import GradingService
+from app.services.llm import LLMClient
+
+router = APIRouter(prefix="/api/grading", tags=["grading"])
+
+# Module-level singleton; initialised lazily on first request.
+_grading_service: GradingService | None = None
+
+
+def _get_service() -> GradingService:
+    global _grading_service
+    if _grading_service is None:
+        _grading_service = GradingService(llm=LLMClient())
+    return _grading_service
+
+
+# ── Request / Response models ───────────────────────────────────────
+
+
+class SubmitRequest(BaseModel):
+    submission_id: str
+
+
+class RulesRequest(BaseModel):
+    course_id: str
+    rules: dict
+
+
+# ── Endpoints ───────────────────────────────────────────────────────
+
+
+@router.post("/submit")
+async def submit_for_grading(
+    payload: SubmitRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Load a submission from DB, run the 4-stage grading pipeline, return results."""
+    svc = _get_service()
+
+    # Validate UUID
+    try:
+        sub_uuid = uuid.UUID(payload.submission_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid submission_id format",
+        )
+
+    # Load submission
+    result = await db.execute(
+        select(Submission).where(Submission.id == sub_uuid)
+    )
+    submission = result.scalar_one_or_none()
+    if submission is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Submission not found",
+        )
+
+    if not submission.content:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Submission has no content to grade",
+        )
+
+    # Derive course_id via the assignment relationship
+    course_id = str(submission.assignment.course_id)
+
+    grading_result = await svc.grade_submission(
+        submission_id=payload.submission_id,
+        content=submission.content,
+        course_id=course_id,
+        db=db,
+    )
+
+    return {
+        "task_id": payload.submission_id,
+        "status": "completed",
+        "result": grading_result,
+    }
+
+
+@router.get("/result/{submission_id}")
+async def get_grading_result(
+    submission_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Return the full grading result (annotations + score + summary)."""
+    submission = await _load_submission(submission_id, db)
+    return {
+        "submission_id": submission_id,
+        "status": submission.status,
+        "score": submission.score,
+        "annotations": submission.annotations,
+    }
+
+
+@router.get("/annotations/{submission_id}")
+async def get_annotations(
+    submission_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Return just the annotations array for a submission."""
+    submission = await _load_submission(submission_id, db)
+    annotations_data = submission.annotations or {}
+    return {
+        "submission_id": submission_id,
+        "annotations": annotations_data.get("annotations", [])
+        if isinstance(annotations_data, dict)
+        else [],
+    }
+
+
+@router.post("/rules")
+async def set_grading_rules(
+    payload: RulesRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Save grading rules for a course's assignments."""
+    svc = _get_service()
+    await svc.save_grading_rules(payload.course_id, payload.rules, db)
+    return {"status": "ok", "course_id": payload.course_id}
+
+
+@router.get("/rules/{course_id}")
+async def get_grading_rules(
+    course_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Return the grading rules for a course."""
+    svc = _get_service()
+    rules = await svc.get_grading_rules(course_id, db)
+    return {"course_id": course_id, "rules": rules}
+
+
+# ── Helpers ─────────────────────────────────────────────────────────
+
+
+async def _load_submission(
+    submission_id: str, db: AsyncSession
+) -> Submission:
+    """Shared helper to load and validate a submission by UUID."""
+    try:
+        sub_uuid = uuid.UUID(submission_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid submission_id format",
+        )
+
+    result = await db.execute(
+        select(Submission).where(Submission.id == sub_uuid)
+    )
+    submission = result.scalar_one_or_none()
+    if submission is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Submission not found",
+        )
+    return submission
