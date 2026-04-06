@@ -1,0 +1,36 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.venv/
+venv/
+
+# Node.js
+node_modules/
+.next/
+dist/
+
+# Data volumes (persisted by Docker)
+data/volumes/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Superpowers (local agent state)
+.superpowers/
+
+# Memsearch (local memory)
+.memsearch/
