@@ -1,0 +1,252 @@
+"use client";
+
+import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
+import { motion } from "framer-motion";
+import { cn } from "@/lib/utils";
+import { apiFetch } from "@/lib/api";
+
+/* ── Types ── */
+
+interface StudentAssignment {
+  id: string;
+  title: string;
+  course_name: string;
+  course_icon: string;
+  due_date: string;
+  status: "pending" | "submitted" | "graded" | "overdue";
+  score?: number;
+}
+
+/* ── Mock data ── */
+
+const mockAssignments: StudentAssignment[] = [
+  {
+    id: "asgn-1",
+    title: "微积分第三章作业 - 导数与微分",
+    course_name: "高等数学 A",
+    course_icon: "ri-function-add-line",
+    due_date: "2026-04-10T23:59:00Z",
+    status: "pending",
+  },
+  {
+    id: "asgn-2",
+    title: "电磁感应综合练习",
+    course_name: "大学物理 II",
+    course_icon: "ri-flashlight-line",
+    due_date: "2026-04-08T23:59:00Z",
+    status: "pending",
+  },
+  {
+    id: "asgn-3",
+    title: "二叉树遍历与应用",
+    course_name: "数据结构与算法",
+    course_icon: "ri-code-s-slash-line",
+    due_date: "2026-04-07T23:59:00Z",
+    status: "submitted",
+  },
+  {
+    id: "asgn-4",
+    title: "微积分第二章作业 - 极限与连续",
+    course_name: "高等数学 A",
+    course_icon: "ri-function-add-line",
+    due_date: "2026-04-03T23:59:00Z",
+    status: "graded",
+    score: 85,
+  },
+  {
+    id: "asgn-5",
+    title: "排序算法实现与分析",
+    course_name: "数据结构与算法",
+    course_icon: "ri-code-s-slash-line",
+    due_date: "2026-04-01T23:59:00Z",
+    status: "graded",
+    score: 92,
+  },
+  {
+    id: "asgn-6",
+    title: "牛顿运动定律计算题",
+    course_name: "大学物理 II",
+    course_icon: "ri-flashlight-line",
+    due_date: "2026-03-28T23:59:00Z",
+    status: "overdue",
+  },
+];
+
+const statusConfig: Record<
+  string,
+  { label: string; cls: string; icon: string }
+> = {
+  pending: {
+    label: "待提交",
+    cls: "bg-ink-warning-light text-ink-warning",
+    icon: "ri-time-line",
+  },
+  submitted: {
+    label: "已提交",
+    cls: "bg-ink-primary-lighter text-ink-primary",
+    icon: "ri-check-line",
+  },
+  graded: {
+    label: "已批改",
+    cls: "bg-ink-success-light text-ink-success",
+    icon: "ri-checkbox-circle-line",
+  },
+  overdue: {
+    label: "已逾期",
+    cls: "bg-ink-error-light text-ink-error",
+    icon: "ri-alarm-warning-line",
+  },
+};
+
+function formatDue(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const diffMs = d.getTime() - now.getTime();
+  const diffH = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffD = Math.floor(diffH / 24);
+
+  if (diffMs < 0) {
+    return d.toLocaleDateString("zh-CN", { month: "short", day: "numeric" });
+  }
+  if (diffD > 1) return `${diffD} 天后截止`;
+  if (diffH > 0) return `${diffH} 小时后截止`;
+  return "即将截止";
+}
+
+const stagger = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.04 } },
+};
+
+const rowVariant = {
+  hidden: { opacity: 0, x: -8 },
+  visible: {
+    opacity: 1,
+    x: 0,
+    transition: { type: "spring" as const, stiffness: 400, damping: 30 },
+  },
+};
+
+export default function AssignmentsPage() {
+  const { data: assignments } = useQuery({
+    queryKey: ["student-assignments"],
+    queryFn: () =>
+      apiFetch<StudentAssignment[]>("/api/grading/submissions?role=student"),
+    placeholderData: mockAssignments,
+  });
+
+  const list = assignments ?? mockAssignments;
+  const pendingCount = list.filter(
+    (a) => a.status === "pending" || a.status === "overdue",
+  ).length;
+
+  return (
+    <motion.div
+      initial="hidden"
+      animate="visible"
+      variants={stagger}
+      className="space-y-6"
+    >
+      <div>
+        <h1 className="text-2xl font-heading font-bold text-ink-text">
+          我的作业
+        </h1>
+        <p className="mt-1 text-sm text-ink-text-muted">
+          {pendingCount} 份作业待完成
+        </p>
+      </div>
+
+      {/* Summary badges */}
+      <div className="flex items-center gap-3">
+        {(["pending", "submitted", "graded", "overdue"] as const).map(
+          (status) => {
+            const config = statusConfig[status];
+            const count = list.filter((a) => a.status === status).length;
+            return (
+              <div
+                key={status}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold",
+                  config.cls,
+                )}
+              >
+                <i className={cn(config.icon, "text-xs")} />
+                {config.label} {count}
+              </div>
+            );
+          },
+        )}
+      </div>
+
+      {/* Assignment list */}
+      <div className="rounded-xl border border-ink-border bg-white overflow-hidden">
+        <motion.div variants={stagger} className="divide-y divide-ink-border">
+          {list.map((asgn) => {
+            const config = statusConfig[asgn.status];
+            return (
+              <motion.div key={asgn.id} variants={rowVariant}>
+                <Link
+                  href={`/s/assignments/${asgn.id}`}
+                  className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-ink-surface/50"
+                >
+                  {/* Course icon */}
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-ink-primary-lighter">
+                    <i
+                      className={cn(
+                        asgn.course_icon || "ri-file-text-line",
+                        "text-lg text-ink-primary",
+                      )}
+                    />
+                  </div>
+
+                  {/* Title + course */}
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm font-medium text-ink-text truncate">
+                      {asgn.title}
+                    </h3>
+                    <p className="mt-0.5 text-xs text-ink-text-muted">
+                      {asgn.course_name}
+                    </p>
+                  </div>
+
+                  {/* Due date */}
+                  <span
+                    className={cn(
+                      "shrink-0 text-xs",
+                      asgn.status === "overdue"
+                        ? "text-ink-error font-medium"
+                        : "text-ink-text-light",
+                    )}
+                  >
+                    {formatDue(asgn.due_date)}
+                  </span>
+
+                  {/* Score */}
+                  {asgn.score !== undefined && (
+                    <span className="shrink-0 text-sm font-heading font-bold text-ink-primary">
+                      {asgn.score}
+                    </span>
+                  )}
+
+                  {/* Status badge */}
+                  <span
+                    className={cn(
+                      "shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                      config.cls,
+                    )}
+                  >
+                    <i className={cn(config.icon, "text-[10px]")} />
+                    {config.label}
+                  </span>
+
+                  <i className="ri-arrow-right-s-line text-ink-text-light shrink-0" />
+                </Link>
+              </motion.div>
+            );
+          })}
+        </motion.div>
+      </div>
+    </motion.div>
+  );
+}
