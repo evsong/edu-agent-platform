@@ -7,11 +7,19 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import Base, engine
 from app.api.auth import router as auth_router
+from app.api.chat import router as chat_router
 from app.api.grading import router as grading_router
 from app.api.knowledge import router as knowledge_router
 from app.api.analytics import router as analytics_router
 from app.api.practice import router as practice_router
 from app.api.platform import router as platform_router
+
+# Import agent modules to trigger @AgentRegistry.register() decorators
+import app.agents.qa_agent  # noqa: F401
+import app.agents.grader_agent  # noqa: F401
+import app.agents.tutor_agent  # noqa: F401
+import app.agents.analyst_agent  # noqa: F401
+import app.agents.meta_agent  # noqa: F401
 
 
 @asynccontextmanager
@@ -44,6 +52,7 @@ app.add_middleware(
 
 # Routers
 app.include_router(auth_router)
+app.include_router(chat_router)
 app.include_router(grading_router)
 app.include_router(knowledge_router)
 app.include_router(analytics_router)
