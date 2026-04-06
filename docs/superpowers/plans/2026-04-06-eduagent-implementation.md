@@ -41,7 +41,7 @@ edu-agent-platform/
 
 - [ ] **Step 2: Write docker-compose.yml**
 
-Services: postgres (16), neo4j (5), redis (7), backend (python:3.12-slim), frontend (node:20-slim), lti-provider (node:20-slim), nginx (alpine). Milvus is already running on win4060 — connect via host network. Map all ports. Define shared network `eduagent-net`. Volume mounts for persistent data.
+Services: postgres (16), neo4j (5), redis (7), mongo (7, for ltijs), backend (python:3.12-slim), frontend (node:20-slim), lti-provider (node:20-slim), nginx (alpine). Milvus is already running on win4060 — connect via host network. Map all ports. Define shared network `eduagent-net`. Volume mounts for persistent data. Add healthchecks for postgres (pg_isready), redis (redis-cli ping), neo4j (cypher-shell). Pin `bcrypt<4.0` in backend requirements to avoid passlib incompatibility.
 
 Environment variables via `.env`:
 ```
@@ -51,8 +51,9 @@ REDIS_URL=redis://redis:6379
 MILVUS_HOST=host.docker.internal
 MILVUS_PORT=19530
 LLM_BASE_URL=https://codex-api.inspiredjinyao.com
-LLM_API_KEY=e0c944b93d0f062fbd82d9328089f2c2
+LLM_API_KEY=your_api_key_here
 LLM_MODEL=gpt-5.4
+MONGODB_URL=mongodb://mongo:27017/lti
 ```
 
 - [ ] **Step 3: Write nginx.conf**
@@ -125,13 +126,33 @@ Load all env vars: DATABASE_URL, REDIS_URL, NEO4J_URI, MILVUS_HOST, LLM_BASE_URL
 
 AsyncSession factory with `create_async_engine(settings.DATABASE_URL)`. Base declarative class. `get_db()` dependency.
 
-- [ ] **Step 4: Write all SQLAlchemy models**
+- [ ] **Step 4a: Write models — user.py, course.py, assignment.py**
 
-Tables: `users` (id, email, name, hashed_password, role: teacher|student, created_at), `courses` (id, name, description, teacher_id FK, created_at), `assignments` (id, course_id FK, title, content, due_date, created_at), `submissions` (id, assignment_id FK, student_id FK, content, status: submitted|grading|graded, score, annotations JSONB, created_at), `knowledge_points` (id, external_id varchar unique, name, course_id FK, difficulty int, tags JSONB, created_at), `xapi_statements` (id UUID, user_id FK, verb varchar, object_type varchar, object_id varchar, result_score float, result_success bool, context JSONB, timestamp timestamptz), `student_profiles` (id, user_id FK, course_id FK, bkt_states JSONB, overall_mastery float, risk_level varchar, last_active timestamptz), `platform_users` (id, user_id FK, platform varchar, platform_user_id varchar, metadata JSONB, unique constraint on platform+platform_user_id), `exercises` (id, course_id FK, knowledge_point_id FK, question text, options JSONB, answer varchar, difficulty int, explanation text).
+`models/user.py`: `users` table (id, email, name, hashed_password, role: teacher|student, created_at).
+`models/course.py`: `courses` table (id, name, description, teacher_id FK, created_at), `course_enrollments` table (user_id, course_id).
+`models/assignment.py`: `assignments` table (id, course_id FK, title, content, due_date, grading_rules JSONB, created_at), `submissions` table (id, assignment_id FK, student_id FK, content, status: submitted|grading|graded, score, annotations JSONB, created_at).
 
-- [ ] **Step 5: Write Pydantic schemas for all models**
+- [ ] **Step 4b: Write models — knowledge_point.py, exercise.py**
 
-Request/response schemas: UserCreate, UserResponse, CourseCreate, CourseResponse, AssignmentCreate, SubmissionCreate, AnnotationSchema (paragraph_id, char_start, char_end, original_text, type, severity, comment, correction, knowledge_point), GradingResult, ExerciseResponse, BKTState, StudentProfile, XAPIStatement.
+`models/knowledge_point.py`: `knowledge_points` table (id, external_id varchar unique, name, course_id FK, difficulty int, tags JSONB, created_at).
+`models/exercise.py`: `exercises` table (id, course_id FK, knowledge_point_id FK, question text, options JSONB, answer varchar, difficulty int, explanation text).
+
+- [ ] **Step 4c: Write models — xapi_statement.py, student_profile.py, platform_user.py**
+
+`models/xapi_statement.py`: `xapi_statements` table (id UUID, user_id FK, verb varchar, object_type varchar, object_id varchar, result_score float, result_success bool, context JSONB, timestamp timestamptz).
+`models/student_profile.py`: `student_profiles` table (id, user_id FK, course_id FK, bkt_states JSONB, overall_mastery float, risk_level varchar, last_active timestamptz).
+`models/platform_user.py`: `platform_users` table (id, user_id FK, platform varchar, platform_user_id varchar, metadata JSONB, unique constraint on platform+platform_user_id).
+
+Each model file includes `__init__.py` for the `models/` package. Also create `__init__.py` for `services/`, `agents/`, `orchestration/`, `api/` packages.
+
+- [ ] **Step 5: Write Pydantic schemas in separate files**
+
+`schemas/user.py`: UserCreate, UserResponse, TokenResponse.
+`schemas/course.py`: CourseCreate, CourseResponse.
+`schemas/assignment.py`: AssignmentCreate, SubmissionCreate, SubmissionResponse.
+`schemas/grading.py`: AnnotationSchema (paragraph_id, char_start, char_end, original_text, type, severity, comment, correction, knowledge_point), GradingResult, GradingRules.
+`schemas/analytics.py`: BKTState, StudentProfileResponse, ExerciseResponse, PracticeAnswerRequest.
+`schemas/platform.py`: LTILaunchData, DingTalkMessage, XAPIStatement.
 
 - [ ] **Step 6: Write auth.py — JWT creation + verification + password hashing**
 
@@ -160,7 +181,12 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 - [ ] **Step 10: Run alembic init + generate initial migration**
 
-Run: `cd backend && alembic init alembic && alembic revision --autogenerate -m "initial tables"`
+Run inside Docker container:
+```bash
+docker-compose exec backend alembic init alembic
+docker-compose exec backend alembic revision --autogenerate -m "initial tables"
+docker-compose exec backend alembic upgrade head
+```
 
 - [ ] **Step 11: Verify backend starts and /health returns 200**
 
@@ -413,7 +439,11 @@ Methods:
 Analytics: `GET /api/analytics/profile/{user_id}`, `GET /api/analytics/warnings/{course_id}`, `GET /api/analytics/report/{course_id}`.
 Practice: `POST /api/practice/generate` (BKT select + optional LLM generation), `POST /api/practice/answer` (check + BKT update), `GET /api/practice/history/{user_id}`.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Verify analytics endpoints**
+
+Seed a student profile with known BKT states → `GET /api/analytics/profile/{user_id}` returns correct mastery data. `POST /api/practice/generate` returns a problem targeting the lowest mastery knowledge point. `GET /api/analytics/warnings/{course_id}` returns students with probMastery < 0.3.
+
+- [ ] **Step 6: Commit**
 
 ```bash
 git add backend/app/services/bkt.py backend/app/services/analytics.py backend/app/api/analytics.py backend/app/api/practice.py backend/tests/
@@ -464,7 +494,12 @@ COPY . .
 CMD ["node", "index.js"]
 ```
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Verify LTI + DingTalk**
+
+Verify ltijs starts: `docker-compose up -d lti-provider && curl http://localhost:3000/keys` returns JWK set.
+Verify DingTalk webhook: `curl -X POST http://localhost:8000/api/platform/dingtalk/webhook -d '{"text":"测试消息"}'` returns agent response.
+
+- [ ] **Step 6: Commit**
 
 ```bash
 git add backend/app/services/platform.py backend/app/api/platform.py lti-provider/
@@ -508,7 +543,7 @@ class DirectorState(TypedDict):
 
 - [ ] **Step 2: Write events.py — SSE event dataclasses**
 
-Events: `AgentStart(agent_id, agent_name)`, `TextDelta(content)`, `AgentEnd(agent_id)`, `Thinking(stage)`, `Done(total_agents)`, `Error(message)`. Serialization to SSE format: `data: {json}\n\n`.
+Events: `AgentStart(agent_id, agent_name)`, `TextDelta(content)`, `Action(name, params)`, `AgentEnd(agent_id)`, `Thinking(stage)`, `Done(total_agents)`, `Error(message)`. `Action` is used for structured data (annotations JSON, exercise data, chart data, citations). Serialization to SSE format: `data: {json}\n\n`.
 
 - [ ] **Step 3: Write base.py — BaseAgent + AgentRegistry + AgentContext**
 
@@ -541,19 +576,42 @@ class AgentRegistry:
 
 - [ ] **Step 4: Write director.py — Director node with LLM routing**
 
-Director prompt: list available agents with descriptions → "Based on the user message, which agent should handle this? Reply with the agent_id or END." Parse response → set `current_agent_id` in state.
+Director prompt template:
+```
+你是 EduAgent 的调度中心。根据用户消息，选择最合适的 Agent 处理。
 
+可用 Agent:
+{agent_descriptions}
+
+用户消息: {message}
+
+回复格式: 只输出 agent_id（如 "qa"）或 "END"（无需处理时）。
+如果用户意图涉及多个步骤（如"批改作业然后出题"），先选第一步的 Agent。
+```
+
+Parse response → regex match agent_id → set `current_agent_id`. Fallback: if parse fails, default to QA Agent.
 Single-agent fast path: if only one registered agent, skip LLM call.
-Turn limit check: if turn_count >= max_turns, set should_end.
+Turn limit check: if turn_count >= max_turns (default=5), set should_end.
 
-- [ ] **Step 5: Write 5 agent implementations**
+- [ ] **Step 5a: Write QAAgent**
 
-Each agent: inherit BaseAgent, implement handle() method.
-- `QAAgent`: call knowledge.search() → build prompt with RAG context → stream LLM response.
-- `GraderAgent`: call grading.grade_submission() → yield structured result.
-- `TutorAgent`: call analytics BKT select_problem → generate exercise → yield.
-- `AnalystAgent`: call analytics get_profile → generate report → yield.
-- `MetaAgent`: handle course/agent configuration commands → yield confirmation.
+`agents/qa_agent.py`: Inherit BaseAgent. `handle()`: call `ctx.knowledge.search(message, ctx.course_id)` → build prompt with RAG context + cross-course hints → `async for chunk in ctx.llm.stream(prompt)`: yield `TextDelta(content=chunk)`. Yield source references as `Action(name="cite", params={sources})`.
+
+- [ ] **Step 5b: Write GraderAgent**
+
+`agents/grader_agent.py`: Inherit BaseAgent. `handle()`: call `ctx.grading.grade_submission(submission_id, content, ctx.course_id)` → yield `TextDelta` with summary → yield `Action(name="annotations", params=annotations_json)`. Depends on GradingService from Task 5.
+
+- [ ] **Step 5c: Write TutorAgent**
+
+`agents/tutor_agent.py`: Inherit BaseAgent. `handle()`: call `ctx.analytics.select_problem(ctx.user_id, ctx.course_id)` → if no exercise from DB, generate via LLM → yield question as `TextDelta` + `Action(name="exercise", params=exercise_json)`.
+
+- [ ] **Step 5d: Write AnalystAgent**
+
+`agents/analyst_agent.py`: Inherit BaseAgent. `handle()`: call `ctx.analytics.get_profile(ctx.user_id, ctx.course_id)` → build report prompt → stream LLM analysis → yield `TextDelta` + `Action(name="profile", params=radar_chart_data)`.
+
+- [ ] **Step 5e: Write MetaAgent**
+
+`agents/meta_agent.py`: Inherit BaseAgent. `handle()`: parse configuration commands (create course agent, set grading rules, upload knowledge base) → call registry/config APIs → yield confirmation `TextDelta`.
 
 - [ ] **Step 6: Write graph.py — LangGraph StateGraph assembly**
 
@@ -628,9 +686,17 @@ List of submissions with status badges. "AI 全部批改" button. Click submissi
 
 Use `cmdk` library. Global keyboard listener. Items: navigate to pages + AI commands ("生成学情报告", "批改所有作业"). AI items show badge.
 
-- [ ] **Step 6: Write remaining teacher pages**
+- [ ] **Step 6a: Write courses pages**
 
-Courses list/detail, agent config (list agents with status + settings), warnings center.
+`courses/page.tsx`: Course list with cards (name, student count, last updated). Create course button.
+`courses/[id]/page.tsx`: Course detail with tabs (overview, students, settings).
+`courses/[id]/knowledge/page.tsx`: Knowledge base management — file upload dropzone, uploaded documents list, "rebuild index" button.
+`courses/[id]/analytics/page.tsx`: Per-course analytics — class-level mastery distribution, top error knowledge points, Recharts BarChart + LineChart.
+
+- [ ] **Step 6b: Write agent config + warnings pages**
+
+`agents/page.tsx`: List of registered agents per course with status badges (running/stopped/configuring). Click → expand config panel: model, temperature, knowledge base, grading rules.
+`warnings/page.tsx`: At-risk student list sorted by severity. Each row: avatar, name, weak knowledge points with probMastery %, Sparkline 7-day trend (Recharts Sparkline in Radix Tooltip on hover). Click → navigate to student profile.
 
 - [ ] **Step 7: Commit**
 
@@ -665,7 +731,12 @@ Top navbar: logo + nav links (courses, chat, assignments, practice, profile). Us
 
 Full-height `<CopilotChat>` component. Custom message renderer to show RAG source badges and cross-course links. Style with Ink & Paper theme.
 
-- [ ] **Step 3: Write assignment annotation viewer**
+- [ ] **Step 3a: Write assignment submission page**
+
+`assignments/page.tsx`: Assignment list (title, due date, status badge: pending/submitted/graded). Click → detail.
+`assignments/[id]/page.tsx` has two modes: **Submit mode** (textarea/file upload + submit button) and **Review mode** (annotation viewer, shown after grading). Status-driven: if submission.status === 'graded', show annotations.
+
+- [ ] **Step 3b: Write assignment annotation viewer**
 
 Numbered lines with line numbers (JetBrains Mono). Error lines: red left border + highlight. Annotation cards below each error: icon + severity + comment + correction + knowledge_point badge. Framer Motion: SVG pathLength animation on annotation underlines. Score display top-right. "开始针对练习" CTA button at bottom.
 
@@ -703,7 +774,7 @@ git commit -m "feat: student portal with chat, annotation viewer, BKT practice, 
 
 - [ ] **Step 1: Write CopilotKit Runtime API route**
 
-`frontend/app/api/copilotkit/route.ts`: Proxy to backend `/api/chat` SSE endpoint. Or use CopilotKit's built-in runtime adapter to connect to our LangGraph backend.
+`frontend/app/api/copilotkit/route.ts`: Use CopilotKit's `CopilotRuntime` with a custom `HttpAgent` that proxies to our backend `POST /api/chat` SSE endpoint. This is the standard approach — CopilotKit runtime handles the AG-UI protocol framing, our backend provides the agent logic.
 
 - [ ] **Step 2: Write embed layout (minimal, no nav)**
 
@@ -744,9 +815,9 @@ git commit -m "feat: CopilotKit embed pages + Chrome extension for LMS injection
 
 Fixed bottom bar, hidden on `md:` breakpoint. 5 tabs with Remixicon icons. Active state highlight. Student tabs: courses/chat/assignments/practice/profile. Teacher tabs: dashboard/courses/grading/analytics/profile.
 
-- [ ] **Step 2: Make teacher sidebar collapsible on mobile**
+- [ ] **Step 2: Add teacher bottom tab bar on mobile**
 
-Sheet/drawer pattern: hamburger menu button in mobile header → sheet slides from left with full sidebar. Desktop: always visible.
+Per spec: teacher mobile also uses bottom 5 tabs (总览/课程/批改/学情/我的), same pattern as student. Desktop: left sidebar stays. Mobile (< md breakpoint): sidebar hidden, bottom TabBar visible. No hamburger menu — bottom tabs are the primary mobile navigation for both roles.
 
 - [ ] **Step 3: Add responsive classes to all pages**
 
@@ -779,9 +850,17 @@ Users: 1 teacher (demo@teacher.com), 5 students (student1-5@demo.com).
 Courses: 高等数学, 大学物理. Link teacher to both.
 Enroll all students in both courses.
 
-- [ ] **Step 2: Prepare course materials for RAG**
+- [ ] **Step 2: Write course materials for RAG (Markdown)**
 
-Create/collect 2-3 PDF/text files per course covering key topics (定积分, 微分, 极限 for math; 牛顿力学, 做功 for physics). These will be uploaded via knowledge API.
+Write 2 markdown files per course (LLM-generated, CC-licensed style):
+- `data/courses/高等数学/定积分与微分.md` — 定积分定义、性质、微积分基本定理、常见公式
+- `data/courses/高等数学/级数与极限.md` — 极限定义、级数收敛判别、常见级数
+- `data/courses/大学物理/牛顿力学.md` — 牛顿三定律、做功定理 W=∫F·ds、动能定理
+- `data/courses/大学物理/运动学.md` — 位移速度加速度、微分关系
+
+- [ ] **Step 2b: Upload materials to RAG pipeline + seed Milvus embeddings**
+
+Call `POST /api/knowledge/upload` for each file. This triggers: Unstructured parse → chunk → embed → Milvus insert → Neo4j knowledge point extraction. Verify: `GET /api/knowledge/search?q=定积分&course_id=math` returns relevant chunks.
 
 - [ ] **Step 3: Write Neo4j seed data**
 
@@ -892,18 +971,28 @@ Expand from design spec. Include architecture diagrams, API documentation, perfo
 
 Docker Compose setup steps, environment variables, seed data, verification commands.
 
-- [ ] **Step 4: Create PPT (≤10 pages)**
+- [ ] **Step 4: Create PPT (≤10 pages, PPTX format)**
 
-1. Cover 2. Problem 3. Solution overview 4. Architecture 5. Demo screenshots 6. M1 Agent framework 7. M5 Annotation + BKT 8. M2 Knowledge graph 9. Innovation summary 10. Team
+Use python-pptx or the `/pptx` skill to generate. Output: `docs/deliverables/项目简介.pptx`.
+Pages: 1. Cover 2. Problem 3. Solution overview 4. Architecture diagram 5. Demo screenshots (6 key screens) 6. M1 Agent framework 7. M5 Annotation + BKT 8. M2 Knowledge graph 9. Innovation summary (7 points) 10. Team
 
-- [ ] **Step 5: Record 5-minute demo video**
+- [ ] **Step 5: Record 5-minute demo video (MP4)**
 
-Script: Landing page → Teacher uploads documents → Student asks question (RAG) → Student submits assignment (annotation) → Student practices (BKT) → Teacher views analytics → Knowledge graph → Platform embedding demo.
+Tool: OBS Studio screen recording, 1920x1080, MP4 output. Output: `docs/deliverables/演示视频.mp4`.
+Script (5 min): 0:00 Landing page overview → 0:30 Teacher uploads course documents → 1:00 Student asks question (RAG + cross-course) → 2:00 Student submits assignment → AI position-level annotation demo → 3:00 Student BKT practice → 3:30 Teacher analytics dashboard + knowledge graph → 4:00 Platform embedding (超星 iframe + 钉钉机器人) → 4:30 Architecture + innovation summary.
 
-- [ ] **Step 6: Commit all deliverables**
+- [ ] **Step 6: 参赛承诺书 (物理文件)**
+
+⚠️ 需要线下操作：打印参赛承诺书模板 → 全部 5 名队员签名 → 找院系盖章 → 扫描为 PDF。Output: `docs/deliverables/参赛承诺书.pdf`. **这项有物理 lead time，应尽早启动。**
+
+- [ ] **Step 7: Verify deployed demo URL accessible**
+
+Confirm `https://eduagent.inspiredjinyao.com` (or win4060 Cloudflare Tunnel URL) is accessible from external network. Run through the full demo script once on the deployed URL.
+
+- [ ] **Step 8: Commit all deliverables**
 
 ```bash
-git add docs/ && git commit -m "docs: competition deliverables - summary, technical doc, PPT, install guide"
+git add docs/deliverables/ docs/*.md && git commit -m "docs: competition deliverables - summary, tech doc, PPT, install guide"
 ```
 
 ---
