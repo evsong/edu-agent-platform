@@ -3,7 +3,6 @@
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Button } from "@/components/ui/button";
 import { fetchSubmissions, submitAIGrading } from "@/lib/queries";
 import type { Submission } from "@/lib/queries";
 import { cn } from "@/lib/utils";
@@ -70,11 +69,21 @@ const mockSubmissions: Submission[] = [
   },
 ];
 
-const statusConfig = {
+const statusConfig: Record<string, { label: string; cls: string; icon: string }> = {
   pending: {
     label: "待批改",
     cls: "bg-ink-warning-light text-ink-warning",
     icon: "ri-time-line",
+  },
+  submitted: {
+    label: "已提交",
+    cls: "bg-ink-warning-light text-ink-warning",
+    icon: "ri-time-line",
+  },
+  graded: {
+    label: "已批改",
+    cls: "bg-ink-success-light text-ink-success",
+    icon: "ri-checkbox-circle-line",
   },
   ai_graded: {
     label: "AI 已批",
@@ -87,6 +96,7 @@ const statusConfig = {
     icon: "ri-checkbox-circle-line",
   },
 };
+const defaultStatus = { label: "未知", cls: "bg-ink-surface text-ink-text-light", icon: "ri-question-line" };
 
 function formatTime(iso: string): string {
   const d = new Date(iso);
@@ -149,33 +159,33 @@ export default function GradingQueuePage() {
             {pendingCount} 份作业等待批改
           </p>
         </div>
-        <Button
+        <button
           onClick={() => {
             const pendingIds = list.filter((s) => s.status === "pending").map((s) => s.id);
             if (pendingIds.length > 0) gradeMutation.mutate(pendingIds);
           }}
           disabled={gradeMutation.isPending || pendingCount === 0}
-          className="bg-ink-primary hover:bg-ink-primary-dark text-white h-9"
+          className="inline-flex h-9 items-center gap-2 rounded-lg bg-ink-primary px-4 text-sm font-medium text-white transition-colors hover:bg-ink-primary-dark disabled:opacity-50 self-start sm:self-auto"
         >
           {gradeMutation.isPending ? (
             <>
-              <i className="ri-loader-4-line animate-spin mr-2" />
+              <i className="ri-loader-4-line animate-spin" />
               批改中...
             </>
           ) : (
             <>
-              <i className="ri-robot-2-line mr-2" />
+              <i className="ri-robot-2-line" />
               AI 全部批改
             </>
           )}
-        </Button>
+        </button>
       </div>
 
       {/* Submissions List */}
       <div className="rounded-xl border border-ink-border bg-white overflow-hidden">
         <motion.div variants={stagger} className="divide-y divide-ink-border">
           {list.map((sub) => {
-            const status = statusConfig[sub.status];
+            const status = statusConfig[sub.status] || defaultStatus;
             return (
               <motion.div
                 key={sub.id}
