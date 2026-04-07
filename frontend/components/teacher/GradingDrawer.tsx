@@ -1,14 +1,7 @@
 "use client";
 
-import { motion } from "framer-motion";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from "@/components/ui/sheet";
-import { Button } from "@/components/ui/button";
+import { useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import type { GradingDetail, Annotation } from "@/lib/queries";
 
@@ -18,7 +11,7 @@ interface GradingDrawerProps {
   detail: GradingDetail | null;
 }
 
-const severityConfig = {
+const severityConfig: Record<string, { icon: string; color: string; bg: string; border: string; label: string }> = {
   error: {
     icon: "ri-close-circle-fill",
     color: "text-ink-error",
@@ -42,8 +35,10 @@ const severityConfig = {
   },
 };
 
+const defaultSeverity = { icon: "ri-information-line", color: "text-ink-text-light", bg: "bg-ink-surface", border: "border-l-ink-border", label: "批注" };
+
 function AnnotationCard({ annotation }: { annotation: Annotation }) {
-  const config = severityConfig[annotation.severity];
+  const config = severityConfig[annotation.severity] || defaultSeverity;
 
   return (
     <motion.div
@@ -65,9 +60,11 @@ function AnnotationCard({ annotation }: { annotation: Annotation }) {
           {annotation.line_end !== annotation.line_start &&
             `-L${annotation.line_end}`}
         </span>
-        <span className="ml-auto inline-flex items-center rounded-full bg-ink-primary-lighter px-2 py-0.5 text-[10px] font-medium text-ink-primary">
-          {annotation.knowledge_point}
-        </span>
+        {annotation.knowledge_point && (
+          <span className="ml-auto inline-flex items-center rounded-full bg-ink-primary-lighter px-2 py-0.5 text-[10px] font-medium text-ink-primary">
+            {annotation.knowledge_point}
+          </span>
+        )}
       </div>
       <p className="text-sm text-ink-text">{annotation.comment}</p>
       {annotation.correction && (
@@ -76,7 +73,7 @@ function AnnotationCard({ annotation }: { annotation: Annotation }) {
             <i className="ri-arrow-right-s-fill mr-1" />
             修正建议
           </p>
-          <p className="mt-1 text-xs text-ink-text font-mono">
+          <p className="mt-1 text-xs text-ink-text font-mono whitespace-pre-wrap">
             {annotation.correction}
           </p>
         </div>
@@ -133,74 +130,105 @@ export default function GradingDrawer({
   onOpenChange,
   detail,
 }: GradingDrawerProps) {
+  // Close on Escape key
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onOpenChange(false);
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [open, onOpenChange]);
+
   if (!detail) return null;
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="right"
-        className="w-full md:w-[70vw] sm:max-w-none overflow-y-auto"
-        showCloseButton={true}
-      >
-        <SheetHeader className="border-b border-ink-border pb-4">
-          <div className="flex items-center justify-between pr-8">
-            <div>
-              <SheetTitle className="text-lg">
-                {detail.assignment_title}
-              </SheetTitle>
-              <SheetDescription>
-                {detail.student_name} 的提交
-              </SheetDescription>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5 rounded-lg bg-ink-primary-lighter px-3 py-1.5">
-                <i className="ri-star-fill text-ink-primary text-sm" />
-                <span className="text-lg font-heading font-bold text-ink-primary">
-                  {detail.score}
-                </span>
-                <span className="text-xs text-ink-text-muted">/100</span>
+    <AnimatePresence>
+      {open && (
+        <>
+          {/* Backdrop */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-40 bg-black/30"
+            onClick={() => onOpenChange(false)}
+          />
+          {/* Drawer */}
+          <motion.div
+            initial={{ x: "100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "100%" }}
+            transition={{ type: "spring", stiffness: 400, damping: 30 }}
+            className="fixed inset-y-0 right-0 z-50 w-full md:w-[70vw] bg-white shadow-2xl overflow-y-auto"
+          >
+            {/* Header */}
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-ink-border bg-white px-5 py-4">
+              <div>
+                <h2 className="text-lg font-heading font-semibold text-ink-text">
+                  {detail.assignment_title || "批改详情"}
+                </h2>
+                <p className="text-sm text-ink-text-muted">
+                  {detail.student_name} 的提交
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5 rounded-lg bg-ink-primary-lighter px-3 py-1.5">
+                  <i className="ri-star-fill text-ink-primary text-sm" />
+                  <span className="text-lg font-heading font-bold text-ink-primary">
+                    {detail.score}
+                  </span>
+                  <span className="text-xs text-ink-text-muted">/100</span>
+                </div>
+                <button
+                  onClick={() => onOpenChange(false)}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-text-light hover:bg-ink-surface hover:text-ink-text transition-colors"
+                >
+                  <i className="ri-close-line text-lg" />
+                </button>
               </div>
             </div>
-          </div>
-        </SheetHeader>
 
-        <div className="space-y-6 p-4">
-          {/* Original text with line numbers */}
-          <div>
-            <h3 className="mb-3 text-sm font-heading font-semibold text-ink-text">
-              <i className="ri-file-text-line mr-1.5 text-ink-primary" />
-              原文
-            </h3>
-            <CodeViewer
-              content={detail.content}
-              annotations={detail.annotations}
-            />
-          </div>
+            {/* Content */}
+            <div className="space-y-6 p-5">
+              {/* Original text */}
+              <div>
+                <h3 className="mb-3 text-sm font-heading font-semibold text-ink-text">
+                  <i className="ri-file-text-line mr-1.5 text-ink-primary" />
+                  原文
+                </h3>
+                <CodeViewer
+                  content={detail.content}
+                  annotations={detail.annotations}
+                />
+              </div>
 
-          {/* Annotations */}
-          {detail.annotations.length > 0 && (
-            <div>
-              <h3 className="mb-3 text-sm font-heading font-semibold text-ink-text">
-                <i className="ri-markup-line mr-1.5 text-ink-primary" />
-                批注 ({detail.annotations.length})
-              </h3>
-              <div className="space-y-3">
-                {detail.annotations.map((a) => (
-                  <AnnotationCard key={a.id} annotation={a} />
-                ))}
+              {/* Annotations */}
+              {detail.annotations.length > 0 && (
+                <div>
+                  <h3 className="mb-3 text-sm font-heading font-semibold text-ink-text">
+                    <i className="ri-markup-line mr-1.5 text-ink-primary" />
+                    批注 ({detail.annotations.length})
+                  </h3>
+                  <div className="space-y-3">
+                    {detail.annotations.map((a) => (
+                      <AnnotationCard key={a.id} annotation={a} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* CTA */}
+              <div className="pt-2">
+                <button className="w-full h-10 inline-flex items-center justify-center gap-2 rounded-lg bg-ink-primary text-sm font-medium text-white transition-colors hover:bg-ink-primary-dark">
+                  <i className="ri-pencil-ruler-2-line" />
+                  开始针对练习
+                </button>
               </div>
             </div>
-          )}
-
-          {/* CTA */}
-          <div className="pt-2">
-            <Button className="w-full bg-ink-primary hover:bg-ink-primary-dark text-white h-10">
-              <i className="ri-pencil-ruler-2-line mr-2" />
-              开始针对练习
-            </Button>
-          </div>
-        </div>
-      </SheetContent>
-    </Sheet>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
   );
 }
