@@ -21,5 +21,5 @@ from app.schemas.analytics import (  # noqa: F401
 from app.schemas.platform import (  # noqa: F401
     LTILaunchData,
     DingTalkMessage,
-    XAPIStatement,
+    XAPIStatementSchema,
 )
