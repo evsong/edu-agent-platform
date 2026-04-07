@@ -71,7 +71,7 @@ services:
       ETCD_DATA_DIR: /var/lib/milvus/etcd
       COMMON_STORAGETYPE: local
     ports:
-      - "19530:19530"
+      - "29530:19530"
     volumes:
       - milvusdata:/var/lib/milvus
     healthcheck:
