@@ -96,9 +96,14 @@ export default function ChatInterface({
     abortRef.current = controller;
 
     try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+
       const res = await fetch("/api/chat/", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ message: text, course_id: courseId }),
         signal: controller.signal,
       });

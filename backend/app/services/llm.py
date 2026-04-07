@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncGenerator
 
+import httpx
 import openai
 
 from app.config import settings
@@ -14,6 +15,9 @@ logger = logging.getLogger(__name__)
 # Default embedding model and dimension
 _EMBED_MODEL = "text-embedding-3-large"
 _EMBED_DIM = 3072
+
+# Timeout: 30s connect, 120s total for streaming responses
+_HTTP_TIMEOUT = httpx.Timeout(connect=30.0, read=120.0, write=30.0, pool=30.0)
 
 
 class LLMClient:
@@ -28,6 +32,8 @@ class LLMClient:
         self._client = openai.AsyncOpenAI(
             base_url=base_url or settings.LLM_BASE_URL,
             api_key=api_key or settings.LLM_API_KEY,
+            timeout=_HTTP_TIMEOUT,
+            max_retries=2,
         )
         self.default_model = default_model or settings.LLM_MODEL
 
@@ -48,8 +54,18 @@ class LLMClient:
         if json_mode:
             kwargs["response_format"] = {"type": "json_object"}
 
-        resp = await self._client.chat.completions.create(**kwargs)
-        return resp.choices[0].message.content or ""
+        try:
+            resp = await self._client.chat.completions.create(**kwargs)
+            return resp.choices[0].message.content or ""
+        except openai.APIConnectionError as e:
+            logger.error("LLM connection failed: %s", e)
+            raise RuntimeError(f"无法连接到 LLM 服务: {e}") from e
+        except openai.APITimeoutError as e:
+            logger.error("LLM request timed out: %s", e)
+            raise RuntimeError("LLM 请求超时，请稍后重试") from e
+        except openai.APIStatusError as e:
+            logger.error("LLM API error %d: %s", e.status_code, e.message)
+            raise RuntimeError(f"LLM 服务错误 ({e.status_code}): {e.message}") from e
 
     # ── Streaming ────────────────────────────────────────────────
 
@@ -60,15 +76,25 @@ class LLMClient:
         model: str | None = None,
     ) -> AsyncGenerator[str, None]:
         """Yield text chunks from a streaming chat completion."""
-        resp = await self._client.chat.completions.create(
-            model=model or self.default_model,
-            messages=messages,
-            stream=True,
-        )
-        async for chunk in resp:
-            delta = chunk.choices[0].delta.content
-            if delta:
-                yield delta
+        try:
+            resp = await self._client.chat.completions.create(
+                model=model or self.default_model,
+                messages=messages,
+                stream=True,
+            )
+            async for chunk in resp:
+                delta = chunk.choices[0].delta.content
+                if delta:
+                    yield delta
+        except openai.APIConnectionError as e:
+            logger.error("LLM stream connection failed: %s", e)
+            raise RuntimeError(f"无法连接到 LLM 服务: {e}") from e
+        except openai.APITimeoutError as e:
+            logger.error("LLM stream timed out: %s", e)
+            raise RuntimeError("LLM 流式请求超时") from e
+        except openai.APIStatusError as e:
+            logger.error("LLM stream API error %d: %s", e.status_code, e.message)
+            raise RuntimeError(f"LLM 服务错误 ({e.status_code}): {e.message}") from e
 
     # ── Embeddings ───────────────────────────────────────────────
 
@@ -81,10 +107,14 @@ class LLMClient:
         """Batch-embed *texts* and return a list of float vectors (3072-d)."""
         if not texts:
             return []
-        resp = await self._client.embeddings.create(
-            model=model or _EMBED_MODEL,
-            input=texts,
-        )
-        # Sort by index to guarantee order matches input
-        sorted_data = sorted(resp.data, key=lambda d: d.index)
-        return [d.embedding for d in sorted_data]
+        try:
+            resp = await self._client.embeddings.create(
+                model=model or _EMBED_MODEL,
+                input=texts,
+            )
+            # Sort by index to guarantee order matches input
+            sorted_data = sorted(resp.data, key=lambda d: d.index)
+            return [d.embedding for d in sorted_data]
+        except (openai.APIConnectionError, openai.APITimeoutError, openai.APIStatusError) as e:
+            logger.error("Embedding request failed: %s", e)
+            raise RuntimeError(f"向量嵌入请求失败: {e}") from e

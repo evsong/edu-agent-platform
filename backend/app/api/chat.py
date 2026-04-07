@@ -7,13 +7,12 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import get_current_user
+from app.auth import get_current_user_optional
 from app.database import get_db
-from app.orchestration.events import Done, Error
+from app.orchestration.events import AgentEnd, AgentStart, Done, Error, TextDelta
 
 logger = logging.getLogger(__name__)
 
@@ -69,105 +68,142 @@ def _get_platform_service(llm):
 @router.post("/")
 async def chat(
     request: ChatRequest,
-    current_user=Depends(get_current_user),
+    current_user=Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db),
 ):
     """SSE streaming chat endpoint.
 
     Accepts a user message and course_id, runs the LangGraph Director Graph,
     and streams back SSE events (AgentStart, TextDelta, Action, AgentEnd, Done).
+
+    If the full LangGraph pipeline fails (e.g., Milvus/Neo4j unavailable),
+    falls back to a direct LLM call for demo purposes.
     """
-    # Import here to ensure agent modules have been registered
-    from app.agents.base import AgentContext, AgentRegistry
-    from app.orchestration.graph import create_agent_graph
+    user_id = str(current_user.id) if current_user else "anonymous"
 
-    # Ensure at least one agent is registered
-    if not AgentRegistry.all():
-        raise HTTPException(
-            status_code=500, detail="No agents registered in the system."
-        )
+    # ── Try full LangGraph pipeline first ────────────────────────
+    try:
+        from app.agents.base import AgentContext, AgentRegistry
+        from app.orchestration.graph import create_agent_graph
+        from langchain_core.messages import HumanMessage
 
-    async def event_generator():
-        # ── Build services ───────────────────────────────────────
-        llm = _get_llm_client()
-        ctx = AgentContext(
-            user_id=str(current_user.id),
-            course_id=request.course_id,
-            knowledge_service=_get_knowledge_service(llm),
-            grading_service=_get_grading_service(llm),
-            analytics_service=_get_analytics_service(llm),
-            platform_service=_get_platform_service(llm),
-            llm_client=llm,
-            db_session=db,
-        )
+        if not AgentRegistry.all():
+            raise RuntimeError("No agents registered in the system.")
 
-        # ── Initial state ────────────────────────────────────────
-        initial_state = {
-            "messages": [HumanMessage(content=request.message)],
-            "user_id": str(current_user.id),
-            "course_id": request.course_id,
-            "current_agent_id": None,
-            "turn_count": 0,
-            "max_turns": 5,
-            "should_end": False,
-            "agent_responses": [],
-        }
+        async def event_generator():
+            llm = _get_llm_client()
+            ctx = AgentContext(
+                user_id=user_id,
+                course_id=request.course_id,
+                knowledge_service=_get_knowledge_service(llm),
+                grading_service=_get_grading_service(llm),
+                analytics_service=_get_analytics_service(llm),
+                platform_service=_get_platform_service(llm),
+                llm_client=llm,
+                db_session=db,
+            )
 
-        # ── Event queue for bridging graph ↔ SSE ─────────────────
-        events_queue: asyncio.Queue = asyncio.Queue()
+            initial_state = {
+                "messages": [HumanMessage(content=request.message)],
+                "user_id": user_id,
+                "course_id": request.course_id,
+                "current_agent_id": None,
+                "turn_count": 0,
+                "max_turns": 5,
+                "should_end": False,
+                "agent_responses": [],
+            }
 
-        async def writer(event):
-            await events_queue.put(event)
+            events_queue: asyncio.Queue = asyncio.Queue()
 
-        # ── Run graph in background task ─────────────────────────
-        agent_count = 0
+            async def writer(event):
+                await events_queue.put(event)
 
-        async def run_graph():
-            nonlocal agent_count
-            try:
-                graph = create_agent_graph()
-                result = await graph.ainvoke(
-                    initial_state,
-                    config={
-                        "configurable": {
-                            "agent_context": ctx,
-                            "llm_client": llm,
-                            "writer": writer,
-                        },
-                    },
-                )
-                agent_count = len(result.get("agent_responses", []))
-            except Exception:
-                logger.exception("Agent graph execution failed")
-                await events_queue.put(
-                    Error(message="Agent 执行出错，请稍后重试。")
-                )
-            finally:
-                await events_queue.put(None)  # sentinel
+            agent_count = 0
 
-        task = asyncio.create_task(run_graph())
-
-        # ── Yield SSE events ─────────────────────────────────────
-        try:
-            while True:
-                event = await events_queue.get()
-                if event is None:
-                    yield Done(total_agents=agent_count).to_sse()
-                    break
-                yield event.to_sse()
-        except asyncio.CancelledError:
-            task.cancel()
-            raise
-        finally:
-            if not task.done():
-                task.cancel()
+            async def run_graph():
+                nonlocal agent_count
                 try:
-                    await task
-                except (asyncio.CancelledError, Exception):
-                    pass
+                    graph = create_agent_graph()
+                    result = await graph.ainvoke(
+                        initial_state,
+                        config={
+                            "configurable": {
+                                "agent_context": ctx,
+                                "llm_client": llm,
+                                "writer": writer,
+                            },
+                        },
+                    )
+                    agent_count = len(result.get("agent_responses", []))
+                except Exception:
+                    logger.exception("Agent graph execution failed")
+                    await events_queue.put(
+                        Error(message="Agent 执行出错，请稍后重试。")
+                    )
+                finally:
+                    await events_queue.put(None)  # sentinel
+
+            task = asyncio.create_task(run_graph())
+
+            try:
+                while True:
+                    event = await events_queue.get()
+                    if event is None:
+                        yield Done(total_agents=agent_count).to_sse()
+                        break
+                    yield event.to_sse()
+            except asyncio.CancelledError:
+                task.cancel()
+                raise
+            finally:
+                if not task.done():
+                    task.cancel()
+                    try:
+                        await task
+                    except (asyncio.CancelledError, Exception):
+                        pass
+
+        return StreamingResponse(
+            event_generator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
+    except Exception as graph_init_err:
+        logger.warning(
+            "LangGraph pipeline unavailable, falling back to direct LLM: %s",
+            graph_init_err,
+        )
+
+    # ── Fallback: direct LLM call ────────────────────────────────
+    async def fallback_stream():
+        yield AgentStart(agent_id="qa", agent_name="智能答疑 Agent").to_sse()
+        try:
+            llm = _get_llm_client()
+            async for chunk in llm.stream([
+                {
+                    "role": "system",
+                    "content": (
+                        "你是EduAgent智能助教，专注于高等数学和大学物理的教学辅助。"
+                        "请用中文回答学生的问题。回答要准确、有条理，适当使用公式。"
+                    ),
+                },
+                {"role": "user", "content": request.message},
+            ]):
+                yield TextDelta(content=chunk).to_sse()
+        except Exception as llm_error:
+            logger.exception("Fallback LLM call failed")
+            yield Error(message=f"LLM 调用失败: {llm_error}").to_sse()
+        yield AgentEnd(agent_id="qa").to_sse()
+        yield Done(total_agents=1).to_sse()
 
     return StreamingResponse(
-        event_generator(),
+        fallback_stream(),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

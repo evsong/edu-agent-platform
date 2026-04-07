@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
+import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 interface Notification {
@@ -10,21 +11,42 @@ interface Notification {
   read: boolean;
 }
 
-const mockNotifications: Notification[] = [
+const studentNotifications: Notification[] = [
   {
-    id: "1",
+    id: "s1",
+    text: "你的第三次作业已批改完成，得分85分",
+    time: "2 分钟前",
+    read: false,
+  },
+  {
+    id: "s2",
+    text: "定积分知识点掌握度提升到72%",
+    time: "1 小时前",
+    read: false,
+  },
+  {
+    id: "s3",
+    text: "新练习题已生成，快来挑战",
+    time: "3 小时前",
+    read: true,
+  },
+];
+
+const teacherNotifications: Notification[] = [
+  {
+    id: "t1",
     text: "张三的作业已批改完成",
     time: "2 分钟前",
     read: false,
   },
   {
-    id: "2",
+    id: "t2",
     text: "李四的掌握度低于 30%，请关注",
     time: "1 小时前",
     read: false,
   },
   {
-    id: "3",
+    id: "t3",
     text: "新课程资料已上传",
     time: "3 小时前",
     read: true,
@@ -34,8 +56,16 @@ const mockNotifications: Notification[] = [
 export default function NotificationBell() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const pathname = usePathname();
 
-  const unreadCount = mockNotifications.filter((n) => !n.read).length;
+  // Determine role from current path
+  const isStudent = pathname?.startsWith("/s/") || pathname === "/s";
+  const notifications = useMemo(
+    () => (isStudent ? studentNotifications : teacherNotifications),
+    [isStudent],
+  );
+
+  const unreadCount = notifications.filter((n) => !n.read).length;
 
   /* close on outside click */
   useEffect(() => {
@@ -77,7 +107,7 @@ export default function NotificationBell() {
             )}
           </div>
           <ul className="max-h-64 overflow-y-auto">
-            {mockNotifications.map((n) => (
+            {notifications.map((n) => (
               <li
                 key={n.id}
                 className={cn(

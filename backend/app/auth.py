@@ -1,8 +1,9 @@
 """JWT token creation/verification and password hashing."""
 
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -61,3 +62,31 @@ async def get_current_user(
     if user is None:
         raise credentials_exception
     return user
+
+
+async def get_current_user_optional(
+    authorization: Optional[str] = Header(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Like get_current_user but returns None instead of raising 401.
+
+    Useful for endpoints that should work for both authenticated and
+    anonymous users (e.g., demo/fallback mode).
+    """
+    if not authorization or not authorization.startswith("Bearer "):
+        return None
+    try:
+        token = authorization.split(" ")[1]
+        payload = jwt.decode(
+            token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM]
+        )
+        user_id: str | None = payload.get("sub")
+        if user_id is None:
+            return None
+
+        from app.models.user import User  # local import to avoid circular dependency
+
+        result = await db.execute(select(User).where(User.id == user_id))
+        return result.scalar_one_or_none()
+    except (JWTError, Exception):
+        return None
