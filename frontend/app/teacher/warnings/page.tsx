@@ -266,7 +266,7 @@ export default function WarningsPage() {
                   </td>
                   <td className="px-5 py-3 text-right">
                     <button
-                      onClick={() => router.push(`/teacher/grading`)}
+                      onClick={() => router.push(`/teacher/courses/${(student as any).course_id || "00000000-0000-4000-b000-000000000001"}/analytics`)}
                       className="inline-flex items-center gap-1 text-xs font-medium text-ink-primary hover:text-ink-primary-dark transition-colors cursor-pointer"
                     >
                       <i className="ri-eye-line" />

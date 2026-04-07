@@ -225,6 +225,7 @@ class AnalyticsService:
                     "avatar": user_name[0] if user_name else "?",
                     "weak_points": weak_points,
                     "risk_level": profile.risk_level,
+                    "course_id": str(profile.course_id),
                 })
 
         return warnings
