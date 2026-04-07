@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { fetchWarnings } from "@/lib/queries";
+import { apiFetch } from "@/lib/api";
 import type { WarningStudent } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
@@ -116,7 +116,19 @@ const rowVariant = {
 export default function WarningsPage() {
   const { data: warnings } = useQuery({
     queryKey: ["all-warnings"],
-    queryFn: () => fetchWarnings("all"),
+    queryFn: async () => {
+      const courses = await apiFetch<{ id: string }[]>("/api/courses");
+      const allWarnings = await Promise.all(
+        courses.map((c) =>
+          apiFetch<{ warnings: WarningStudent[] }>(
+            `/api/analytics/warnings/${c.id}?threshold=0.5`,
+          )
+            .then((r) => r.warnings)
+            .catch(() => [] as WarningStudent[]),
+        ),
+      );
+      return allWarnings.flat();
+    },
     placeholderData: mockWarnings,
   });
 

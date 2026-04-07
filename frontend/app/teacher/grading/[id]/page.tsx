@@ -1,11 +1,12 @@
 "use client";
 
-import { use } from "react";
+import { use, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import GradingDrawer from "@/components/teacher/GradingDrawer";
 import { fetchGradingDetail } from "@/lib/queries";
+import { apiFetch } from "@/lib/api";
 import type { GradingDetail } from "@/lib/queries";
 
 const mockDetail: GradingDetail = {
@@ -96,11 +97,36 @@ export default function GradingDetailPage({
   const { id } = use(params);
   const router = useRouter();
 
-  const { data: detail } = useQuery({
+  const { data: annotations } = useQuery({
     queryKey: ["grading-detail", id],
     queryFn: () => fetchGradingDetail(id),
     placeholderData: mockDetail,
   });
+
+  const { data: submission } = useQuery({
+    queryKey: ["submission-detail", id],
+    queryFn: () => apiFetch<{
+      id: string;
+      student_name?: string;
+      assignment_title?: string;
+      content?: string;
+      score?: number;
+      status?: string;
+    }>(`/api/grading/result/${id}`),
+  });
+
+  // Merge submission metadata with annotation data, falling back to mock
+  const detail = useMemo<GradingDetail>(() => {
+    const base = annotations ?? mockDetail;
+    if (!submission) return base;
+    return {
+      ...base,
+      student_name: submission.student_name || base.student_name,
+      assignment_title: submission.assignment_title || base.assignment_title,
+      content: submission.content || base.content,
+      score: submission.score ?? base.score,
+    };
+  }, [annotations, submission]);
 
   return (
     <motion.div

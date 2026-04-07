@@ -1,8 +1,7 @@
 "use client";
 
-import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { fetchSubmissions, submitAIGrading } from "@/lib/queries";
@@ -116,7 +115,7 @@ const rowVariant = {
 
 export default function GradingQueuePage() {
   const router = useRouter();
-  const [grading, setGrading] = useState(false);
+  const queryClient = useQueryClient();
 
   const { data: submissions } = useQuery({
     queryKey: ["submissions"],
@@ -124,22 +123,15 @@ export default function GradingQueuePage() {
     placeholderData: mockSubmissions,
   });
 
+  const gradeMutation = useMutation({
+    mutationFn: (ids: string[]) => submitAIGrading(ids),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["submissions"] });
+    },
+  });
+
   const list = submissions ?? mockSubmissions;
   const pendingCount = list.filter((s) => s.status === "pending").length;
-
-  const handleAIGradeAll = useCallback(async () => {
-    setGrading(true);
-    const pendingIds = list
-      .filter((s) => s.status === "pending")
-      .map((s) => s.id);
-    try {
-      await submitAIGrading(pendingIds);
-    } catch {
-      // Demo mode
-    } finally {
-      setTimeout(() => setGrading(false), 2000);
-    }
-  }, [list]);
 
   return (
     <motion.div
@@ -158,11 +150,14 @@ export default function GradingQueuePage() {
           </p>
         </div>
         <Button
-          onClick={handleAIGradeAll}
-          disabled={grading || pendingCount === 0}
+          onClick={() => {
+            const pendingIds = list.filter((s) => s.status === "pending").map((s) => s.id);
+            if (pendingIds.length > 0) gradeMutation.mutate(pendingIds);
+          }}
+          disabled={gradeMutation.isPending || pendingCount === 0}
           className="bg-ink-primary hover:bg-ink-primary-dark text-white h-9"
         >
-          {grading ? (
+          {gradeMutation.isPending ? (
             <>
               <i className="ri-loader-4-line animate-spin mr-2" />
               批改中...
