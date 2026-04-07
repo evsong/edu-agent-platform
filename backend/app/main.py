@@ -13,6 +13,9 @@ from app.api.knowledge import router as knowledge_router
 from app.api.analytics import router as analytics_router
 from app.api.practice import router as practice_router
 from app.api.platform import router as platform_router
+from app.api.agents import router as agents_router
+from app.api.courses import router as courses_router
+from app.api.assignments import router as assignments_router
 
 # Import agent modules to trigger @AgentRegistry.register() decorators
 import app.agents.qa_agent  # noqa: F401
@@ -58,6 +61,9 @@ app.include_router(knowledge_router)
 app.include_router(analytics_router)
 app.include_router(practice_router)
 app.include_router(platform_router)
+app.include_router(agents_router)
+app.include_router(courses_router)
+app.include_router(assignments_router)
 
 
 @app.get("/health")

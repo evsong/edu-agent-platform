@@ -8,3 +8,4 @@ from app.models.exercise import Exercise  # noqa: F401
 from app.models.xapi_statement import XAPIStatement  # noqa: F401
 from app.models.student_profile import StudentProfile  # noqa: F401
 from app.models.platform_user import PlatformUser  # noqa: F401
+from app.models.agent_config import AgentConfig  # noqa: F401

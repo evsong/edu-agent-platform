@@ -44,6 +44,7 @@ from app.models.assignment import Assignment, Submission
 from app.models.knowledge_point import KnowledgePoint
 from app.models.exercise import Exercise
 from app.models.student_profile import StudentProfile
+from app.models.agent_config import AgentConfig
 
 # ── Paths ────────────────────────────────────────────────────
 DATA_DIR = Path(__file__).resolve().parent
@@ -446,6 +447,59 @@ async def seed_student_profiles(session: AsyncSession) -> None:
     print(f"  [+] Created {len(STUDENT_IDS) * 2} student profiles (BKT states populated)")
 
 
+async def seed_agent_configs(session: AsyncSession) -> None:
+    """Create 4 demo agent configs."""
+    configs = [
+        AgentConfig(
+            agent_id="qa",
+            name="数学答疑助手",
+            course_id=MATH_COURSE_ID,
+            status="running",
+            model="GPT-5.4",
+            temperature=0.3,
+            knowledge_base="高等数学知识库 (24 知识点)",
+            grading_rules="严格模式 - 步骤评分",
+            icon="ri-calculator-line",
+        ),
+        AgentConfig(
+            agent_id="qa",
+            name="物理实验指导",
+            course_id=PHYSICS_COURSE_ID,
+            status="running",
+            model="Claude 4 Sonnet",
+            temperature=0.5,
+            knowledge_base="大学物理知识库 (18 知识点)",
+            grading_rules="宽松模式 - 结果评分",
+            icon="ri-flask-line",
+        ),
+        AgentConfig(
+            agent_id="tutor",
+            name="算法题解析",
+            course_id=MATH_COURSE_ID,
+            status="configuring",
+            model="GPT-5",
+            temperature=0.2,
+            knowledge_base="配置中...",
+            grading_rules="代码评审模式",
+            icon="ri-code-s-slash-line",
+        ),
+        AgentConfig(
+            agent_id="analyst",
+            name="统计学辅导",
+            course_id=PHYSICS_COURSE_ID,
+            status="stopped",
+            model="Claude 4 Sonnet",
+            temperature=0.4,
+            knowledge_base="概率论知识库 (12 知识点)",
+            grading_rules="标准模式",
+            icon="ri-pie-chart-line",
+        ),
+    ]
+    session.add_all(configs)
+    await session.flush()
+    print(f"  [+] Created {len(configs)} agent configs")
+
+
 async def seed_neo4j() -> None:
     """Load the cypher file into Neo4j."""
     try:
@@ -499,7 +553,7 @@ async def main() -> None:
     # Create tables if they don't exist
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    print("[1/8] Tables ensured")
+    print("[1/9] Tables ensured")
 
     async with async_session() as session:
         async with session.begin():
@@ -510,26 +564,29 @@ async def main() -> None:
                 print("    Run: DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
                 return
 
-            print("[2/8] Seeding users...")
+            print("[2/9] Seeding users...")
             await seed_users(session)
 
-            print("[3/8] Seeding courses...")
+            print("[3/9] Seeding courses...")
             await seed_courses(session)
 
-            print("[4/8] Seeding enrollments...")
+            print("[4/9] Seeding enrollments...")
             await seed_enrollments(session)
 
-            print("[5/8] Seeding knowledge points...")
+            print("[5/9] Seeding knowledge points...")
             await seed_knowledge_points(session)
 
-            print("[6/8] Seeding exercises...")
+            print("[6/9] Seeding exercises...")
             await seed_exercises(session)
 
-            print("[7/8] Seeding assignments & submissions...")
+            print("[7/9] Seeding assignments & submissions...")
             await seed_assignments(session)
 
-            print("[8/8] Seeding student profiles (BKT)...")
+            print("[8/9] Seeding student profiles (BKT)...")
             await seed_student_profiles(session)
+
+            print("[9/9] Seeding agent configs...")
+            await seed_agent_configs(session)
 
         # Commit happens automatically when the `begin()` block exits
 
