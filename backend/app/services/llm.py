@@ -12,9 +12,19 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Default embedding model and dimension
-_EMBED_MODEL = "text-embedding-3-large"
-_EMBED_DIM = 3072
+# Local embedding model via fastembed (384-dim, runs in-process, no external API)
+_EMBED_DIM = 384
+_fastembed_model = None
+
+
+def _get_fastembed():
+    """Lazy-load fastembed model (downloads ~50MB on first use)."""
+    global _fastembed_model
+    if _fastembed_model is None:
+        from fastembed import TextEmbedding
+        _fastembed_model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
+        logger.info("fastembed model loaded: BAAI/bge-small-en-v1.5 (%d-dim)", _EMBED_DIM)
+    return _fastembed_model
 
 # Timeout: 30s connect, 120s total for streaming responses
 _HTTP_TIMEOUT = httpx.Timeout(connect=30.0, read=120.0, write=30.0, pool=30.0)
@@ -104,17 +114,13 @@ class LLMClient:
         *,
         model: str | None = None,
     ) -> list[list[float]]:
-        """Batch-embed *texts* and return a list of float vectors (3072-d)."""
+        """Batch-embed *texts* using local fastembed (384-d BGE model)."""
         if not texts:
             return []
         try:
-            resp = await self._client.embeddings.create(
-                model=model or _EMBED_MODEL,
-                input=texts,
-            )
-            # Sort by index to guarantee order matches input
-            sorted_data = sorted(resp.data, key=lambda d: d.index)
-            return [d.embedding for d in sorted_data]
-        except (openai.APIConnectionError, openai.APITimeoutError, openai.APIStatusError) as e:
+            fe = _get_fastembed()
+            embeddings = list(fe.embed(texts))
+            return [e.tolist() for e in embeddings]
+        except Exception as e:
             logger.error("Embedding request failed: %s", e)
             raise RuntimeError(f"向量嵌入请求失败: {e}") from e

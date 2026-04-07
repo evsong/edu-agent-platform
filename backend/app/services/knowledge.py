@@ -12,11 +12,9 @@ from neo4j import AsyncGraphDatabase
 from pymilvus import CollectionSchema, DataType, FieldSchema, MilvusClient
 
 from app.config import settings
-from app.services.llm import LLMClient
+from app.services.llm import LLMClient, _EMBED_DIM
 
 logger = logging.getLogger(__name__)
-
-_EMBED_DIM = 3072
 _CHUNK_SIZE = 1000
 _CHUNK_OVERLAP = 200
 
