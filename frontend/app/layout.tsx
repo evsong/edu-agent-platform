@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Plus_Jakarta_Sans, Inter, JetBrains_Mono } from "next/font/google";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/lib/auth";
 import "remixicon/fonts/remixicon.css";
 import "./globals.css";
@@ -44,7 +43,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col font-sans bg-white text-ink-text">
         <AuthProvider>
-          <TooltipProvider>{children}</TooltipProvider>
+          {children}
         </AuthProvider>
       </body>
     </html>

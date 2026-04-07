@@ -150,33 +150,50 @@ export async function fetchKnowledgeGraph(courseId: string) {
   } as KnowledgeGraphData;
 }
 
-export function fetchSubmissions(status?: string) {
-  const params = status ? `?status=${status}` : "";
+export function fetchSubmissions(assignmentId?: string) {
+  const id = assignmentId || "00000000-0000-4000-c000-000000000001";
   return apiFetch<Submission[]>(
-    `/api/assignments/00000000-0000-4000-c000-000000000001/submissions${params}`,
+    `/api/assignments/${id}/submissions`,
   );
 }
 
-export async function fetchGradingDetail(submissionId: string) {
-  const res = await apiFetch<{ submission_id: string; annotations: any[] }>(
-    `/api/grading/annotations/${submissionId}`,
-  );
+export async function fetchGradingDetail(submissionId: string): Promise<GradingDetail> {
+  const res = await apiFetch<{
+    submission_id: string;
+    student_name: string;
+    assignment_title: string;
+    content: string;
+    score: number;
+    status: string;
+    annotations: any;
+  }>(`/api/grading/result/${submissionId}`);
+
+  // Extract annotations array from the JSONB field
+  let rawAnnotations: any[] = [];
+  if (res.annotations) {
+    if (Array.isArray(res.annotations)) {
+      rawAnnotations = res.annotations;
+    } else if (res.annotations.annotations && Array.isArray(res.annotations.annotations)) {
+      rawAnnotations = res.annotations.annotations;
+    }
+  }
+
   return {
     id: submissionId,
-    student_name: "",
-    assignment_title: "",
-    content: "",
-    score: 0,
-    annotations: (res.annotations || []).map((a: any, i: number) => ({
+    student_name: res.student_name || "",
+    assignment_title: res.assignment_title || "",
+    content: res.content || "",
+    score: res.score || 0,
+    annotations: rawAnnotations.map((a: any, i: number) => ({
       id: `ann-${i}`,
       line_start: parseInt(a.paragraph_id?.replace("P", "") || "1"),
       line_end: parseInt(a.paragraph_id?.replace("P", "") || "1"),
-      severity: a.severity || "info",
+      severity: a.severity || a.type || "info",
       comment: a.comment || "",
       correction: a.correction || "",
       knowledge_point: a.knowledge_point || "",
     })),
-  } as GradingDetail;
+  };
 }
 
 export function fetchCourses() {

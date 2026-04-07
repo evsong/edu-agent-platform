@@ -210,7 +210,7 @@ export default function WarningsPage() {
           </thead>
           <motion.tbody variants={stagger}>
             {sorted.map((student) => {
-              const risk = riskConfig[student.risk_level];
+              const risk = riskConfig[student.risk_level] || { label: "正常", cls: "bg-ink-surface text-ink-text-light", headerCls: "border-l-ink-border", sortOrder: 3 };
               return (
                 <motion.tr
                   key={student.id}

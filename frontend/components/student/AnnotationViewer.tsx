@@ -135,7 +135,7 @@ export default function AnnotationViewer({
                 {lineAnnotations && lineAnnotations.length > 0 && (
                   <div className="px-12 py-2 space-y-2 bg-white border-b border-ink-border">
                     {lineAnnotations.map((a, ai) => {
-                      const config = severityConfig[a.severity];
+                      const config = severityConfig[a.severity] || severityConfig.info;
                       return (
                         <motion.div
                           key={a.id}

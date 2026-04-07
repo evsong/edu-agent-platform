@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { apiFetch } from "@/lib/api";
 import { fetchCourse } from "@/lib/queries";
 import type { Course } from "@/lib/queries";
 
@@ -37,6 +38,14 @@ export default function CourseDetailPage({
     queryFn: () => fetchCourse(id),
     placeholderData: mockCourse,
   });
+
+  const { data: studentsData } = useQuery({
+    queryKey: ["course-students", id],
+    queryFn: () =>
+      apiFetch<{ students: typeof mockStudents }>(`/api/courses/${id}/students`),
+    placeholderData: { students: mockStudents },
+  });
+  const students = studentsData?.students ?? mockStudents;
 
   const c = course ?? mockCourse;
 
@@ -156,7 +165,7 @@ export default function CourseDetailPage({
                 </tr>
               </thead>
               <tbody>
-                {mockStudents.map((s) => (
+                {students.map((s) => (
                   <tr
                     key={s.id}
                     className="border-b border-ink-border last:border-0 hover:bg-ink-surface/50 transition-colors"
@@ -177,11 +186,11 @@ export default function CourseDetailPage({
                         <div className="h-1.5 w-20 rounded-full bg-ink-surface overflow-hidden">
                           <div
                             className="h-full rounded-full bg-ink-primary transition-all"
-                            style={{ width: `${s.mastery}%` }}
+                            style={{ width: `${(s as any).overall_mastery ?? s.mastery ?? 0}%` }}
                           />
                         </div>
                         <span className="text-xs font-mono text-ink-text-muted">
-                          {s.mastery}%
+                          {(s as any).overall_mastery ?? s.mastery ?? 0}%
                         </span>
                       </div>
                     </td>

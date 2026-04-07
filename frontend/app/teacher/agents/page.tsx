@@ -227,7 +227,7 @@ export default function AgentsPage() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {list.map((agent) => {
-          const status = statusConfig[agent.status];
+          const status = statusConfig[agent.status] || { label: "未知", cls: "bg-ink-surface text-ink-text-light", dot: "bg-ink-text-light" };
           return (
             <motion.div
               key={agent.id}
