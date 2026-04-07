@@ -18,6 +18,24 @@ import {
 } from "recharts";
 import EnergyRing from "@/components/student/EnergyRing";
 import { apiFetch } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
+
+/* ── Constants ── */
+const MATH_COURSE_ID = "00000000-0000-4000-b000-000000000001";
+
+/** Map backend KP external IDs to Chinese display names */
+const KP_NAMES: Record<string, string> = {
+  "MATH-LIMIT-001": "数列极限",
+  "MATH-LIMIT-002": "函数极限",
+  "MATH-DIFF-001": "导数与微分",
+  "MATH-CALC-001": "不定积分",
+  "MATH-CALC-002": "定积分",
+  "MATH-CALC-003": "定积分性质",
+  "MATH-SERIES-001": "数项级数",
+  "MATH-SERIES-002": "幂级数",
+  "MATH-VEC-001": "向量代数",
+  "MATH-DET-001": "行列式",
+};
 
 /* ── Types ── */
 
@@ -28,6 +46,28 @@ interface ProfileData {
     total_interactions: number;
     practice_sessions: number;
     improvement_rate: number;
+  };
+}
+
+interface BackendProfile {
+  bkt_states: Record<string, { p_know: number }>;
+  overall_mastery: number;
+  risk_level: string;
+}
+
+/** Transform backend BKT response → frontend ProfileData */
+function transformProfile(raw: BackendProfile): ProfileData {
+  const knowledge_points = Object.entries(raw.bkt_states)
+    .filter(([id]) => id in KP_NAMES)
+    .map(([id, state]) => ({
+      name: KP_NAMES[id],
+      mastery: state.p_know,
+    }));
+
+  return {
+    knowledge_points,
+    mastery_history: mockProfile.mastery_history, // history not in this endpoint
+    stats: mockProfile.stats, // stats not in this endpoint
   };
 }
 
@@ -62,28 +102,33 @@ const mockProfile: ProfileData = {
   },
 };
 
-const radarData = mockProfile.knowledge_points.map((kp) => ({
-  subject: kp.name,
-  value: Math.round(kp.mastery * 100),
-  fullMark: 100,
-}));
-
 const stagger = {
   hidden: {},
   visible: { transition: { staggerChildren: 0.06 } },
 };
 
 export default function ProfilePage() {
+  const { user } = useAuth();
+
   const { data: profile } = useQuery({
-    queryKey: ["student-profile"],
-    queryFn: () =>
-      apiFetch<ProfileData>(
-        "/api/analytics/profile/current-user?course_id=math-101",
-      ),
+    queryKey: ["student-profile", user?.id],
+    queryFn: async () => {
+      const raw = await apiFetch<BackendProfile>(
+        `/api/analytics/profile/${user!.id}?course_id=${MATH_COURSE_ID}`,
+      );
+      return transformProfile(raw);
+    },
+    enabled: !!user?.id,
     placeholderData: mockProfile,
   });
 
   const data = profile ?? mockProfile;
+
+  const radarData = data.knowledge_points.map((kp) => ({
+    subject: kp.name,
+    value: Math.round(kp.mastery * 100),
+    fullMark: 100,
+  }));
 
   return (
     <motion.div

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect, useMemo } from "react";
-import { usePathname } from "next/navigation";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 interface Notification {
@@ -57,6 +57,7 @@ export default function NotificationBell() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
+  const router = useRouter();
 
   // Determine role from current path
   const isStudent = pathname?.startsWith("/s/") || pathname === "/s";
@@ -65,7 +66,14 @@ export default function NotificationBell() {
     [isStudent],
   );
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  const [readIds, setReadIds] = useState<Set<string>>(new Set());
+
+  const unreadCount = notifications.filter((n) => !n.read && !readIds.has(n.id)).length;
+
+  const handleViewAll = useCallback(() => {
+    setReadIds(new Set(notifications.map((n) => n.id)));
+    setOpen(false);
+  }, [notifications]);
 
   /* close on outside click */
   useEffect(() => {
@@ -112,13 +120,14 @@ export default function NotificationBell() {
                 key={n.id}
                 className={cn(
                   "flex items-start gap-3 px-4 py-3 transition-colors hover:bg-ink-surface cursor-pointer",
-                  !n.read && "bg-ink-primary-lighter/40",
+                  !n.read && !readIds.has(n.id) && "bg-ink-primary-lighter/40",
                 )}
+                onClick={() => setReadIds((prev) => new Set(prev).add(n.id))}
               >
                 <div
                   className={cn(
                     "mt-1 h-2 w-2 shrink-0 rounded-full",
-                    n.read ? "bg-transparent" : "bg-ink-primary",
+                    n.read || readIds.has(n.id) ? "bg-transparent" : "bg-ink-primary",
                   )}
                 />
                 <div className="flex-1 min-w-0">
@@ -133,8 +142,11 @@ export default function NotificationBell() {
             ))}
           </ul>
           <div className="border-t border-ink-border px-4 py-2.5">
-            <button className="w-full text-center text-xs font-medium text-ink-primary hover:underline">
-              查看全部
+            <button
+              onClick={handleViewAll}
+              className="w-full text-center text-xs font-medium text-ink-primary hover:underline"
+            >
+              {unreadCount > 0 ? "全部已读" : "关闭"}
             </button>
           </div>
         </div>
