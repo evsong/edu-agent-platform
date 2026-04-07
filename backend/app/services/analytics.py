@@ -123,14 +123,14 @@ class AnalyticsService:
 
         # Recalculate overall mastery
         if bkt_states:
-            mastery_values = [s.get("probMastery", 0.3) for s in bkt_states.values()]
+            mastery_values = [s.get("p_know", s.get("probMastery", 0.3)) for s in bkt_states.values()]
             overall_mastery = sum(mastery_values) / len(mastery_values)
         else:
             overall_mastery = 0.0
 
         # Determine risk level
         min_mastery = min(
-            (s.get("probMastery", 0.3) for s in bkt_states.values()), default=0.0
+            (s.get("p_know", s.get("probMastery", 0.3)) for s in bkt_states.values()), default=0.0
         )
         if min_mastery < 0.3:
             risk_level = "high"
@@ -180,13 +180,25 @@ class AnalyticsService:
         )
         profiles = result.scalars().all()
 
-        # Pre-load KP names for readable output
+        # Pre-load KP names by external_id (bkt_states keys are external_ids)
         kp_result = await db.execute(
             select(KnowledgePoint).where(KnowledgePoint.course_id == course_id)
         )
-        kp_map: dict[str, str] = {
-            str(kp.id): kp.name for kp in kp_result.scalars().all()
-        }
+        kp_map: dict[str, str] = {}
+        for kp in kp_result.scalars().all():
+            if kp.external_id:
+                kp_map[kp.external_id] = kp.name
+            kp_map[str(kp.id)] = kp.name  # also map by UUID as fallback
+
+        # Pre-load user names
+        user_ids = [p.user_id for p in profiles]
+        if user_ids:
+            user_result = await db.execute(
+                select(User).where(User.id.in_(user_ids))
+            )
+            user_map = {u.id: u.name for u in user_result.scalars().all()}
+        else:
+            user_map = {}
 
         warnings: list[dict] = []
         for profile in profiles:
@@ -194,19 +206,23 @@ class AnalyticsService:
             weak_points: list[dict] = []
 
             for kp_id, params in bkt_states.items():
-                mastery = params.get("probMastery", 0.3)
+                # Support both seed format (p_know) and BKT format (probMastery)
+                mastery = params.get("p_know", params.get("probMastery", 0.3))
                 if mastery < threshold:
                     weak_points.append({
-                        "kp_id": kp_id,
-                        "kp_name": kp_map.get(kp_id, kp_id),
-                        "mastery": round(mastery, 4),
+                        "name": kp_map.get(kp_id, kp_id),
+                        "mastery": round(mastery * 100),
                     })
 
             if weak_points:
-                user_name = profile.user.name if profile.user else "Unknown"
+                # Sort by mastery ascending (worst first), limit to top 5
+                weak_points.sort(key=lambda x: x["mastery"])
+                weak_points = weak_points[:5]
+                user_name = user_map.get(profile.user_id, "Unknown")
                 warnings.append({
-                    "user_id": str(profile.user_id),
-                    "user_name": user_name,
+                    "id": str(profile.user_id),
+                    "name": user_name,
+                    "avatar": user_name[0] if user_name else "?",
                     "weak_points": weak_points,
                     "risk_level": profile.risk_level,
                 })
@@ -458,7 +474,7 @@ class AnalyticsService:
         # Fallback: generate via LLM based on weakest KP
         weakest_kp_id, weakest_mastery = None, 1.0
         for kp_id, params in bkt_states.items():
-            m = params.get("probMastery", 0.3)
+            m = params.get("p_know", params.get("probMastery", 0.3))
             if m < weakest_mastery:
                 weakest_mastery = m
                 weakest_kp_id = kp_id
