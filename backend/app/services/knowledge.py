@@ -63,15 +63,17 @@ class KnowledgeService:
             FieldSchema(name="metadata", dtype=DataType.JSON),
         ]
         schema = CollectionSchema(fields=fields, description="Course document chunks")
+        index_params = MilvusClient.prepare_index_params()
+        index_params.add_index(
+            field_name="vector",
+            index_type="IVF_FLAT",
+            metric_type="COSINE",
+            params={"nlist": 128},
+        )
         self.milvus.create_collection(
             collection_name=collection_name,
             schema=schema,
-        )
-        # Create vector index for search
-        self.milvus.create_index(
-            collection_name=collection_name,
-            field_name="vector",
-            index_params={"index_type": "IVF_FLAT", "metric_type": "COSINE", "params": {"nlist": 128}},
+            index_params=index_params,
         )
 
     # ── upload_document ──────────────────────────────────────────
