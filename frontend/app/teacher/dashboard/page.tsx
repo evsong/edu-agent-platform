@@ -23,6 +23,7 @@ import {
   fetchStatOverview,
   fetchKnowledgeMastery,
   fetchWarnings,
+  fetchCourses,
 } from "@/lib/queries";
 
 /* ── Mock data for demo/competition ── */
@@ -141,6 +142,12 @@ const stagger = {
 };
 
 export default function DashboardPage() {
+  const { data: courses } = useQuery({
+    queryKey: ["teacher-courses"],
+    queryFn: fetchCourses,
+  });
+  const firstCourseId = courses?.[0]?.id || "00000000-0000-4000-b000-000000000001";
+
   const { data: overview } = useQuery({
     queryKey: ["stat-overview"],
     queryFn: () => fetchStatOverview(),
@@ -148,14 +155,16 @@ export default function DashboardPage() {
   });
 
   const { data: mastery } = useQuery({
-    queryKey: ["knowledge-mastery", "default"],
-    queryFn: () => fetchKnowledgeMastery("default"),
+    queryKey: ["knowledge-mastery", firstCourseId],
+    queryFn: () => fetchKnowledgeMastery(firstCourseId),
+    enabled: !!firstCourseId,
     placeholderData: mockMastery,
   });
 
   const { data: warnings } = useQuery({
-    queryKey: ["warnings", "default"],
-    queryFn: () => fetchWarnings("default"),
+    queryKey: ["warnings", firstCourseId],
+    queryFn: () => fetchWarnings(firstCourseId),
+    enabled: !!firstCourseId,
     placeholderData: mockWarnings,
   });
 
