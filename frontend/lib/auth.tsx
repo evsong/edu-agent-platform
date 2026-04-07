@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -61,15 +62,20 @@ function getStoredToken(): string | null {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  // Lazy initializers — run once, no effect needed
-  const [token, setToken] = useState<string | null>(getStoredToken);
-  const [user, setUser] = useState<User | null>(() => {
-    const t = getStoredToken();
-    return t ? decodePayload(t) : null;
-  });
+  // Start with null to match server-rendered HTML (avoids hydration mismatch)
+  const [token, setToken] = useState<string | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // No loading state needed — synchronous localStorage read
-  const isLoading = false;
+  // Hydrate from localStorage after mount (client-only)
+  useEffect(() => {
+    const stored = getStoredToken();
+    if (stored) {
+      setToken(stored);
+      setUser(decodePayload(stored));
+    }
+    setIsLoading(false);
+  }, []);
 
   const login = useCallback((newToken: string) => {
     localStorage.setItem("token", newToken);
