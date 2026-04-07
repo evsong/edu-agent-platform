@@ -10,7 +10,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models.assignment import Submission
+from app.models.assignment import Assignment, Submission
+from app.models.user import User
 from app.services.grading import GradingService
 from app.services.llm import LLMClient
 
@@ -98,10 +99,26 @@ async def get_grading_result(
     submission_id: str,
     db: AsyncSession = Depends(get_db),
 ):
-    """Return the full grading result (annotations + score + summary)."""
+    """Return the full grading result with student name, assignment title, content."""
     submission = await _load_submission(submission_id, db)
+
+    # Fetch student name
+    student_name = ""
+    if submission.student_id:
+        stu_q = await db.execute(select(User.name).where(User.id == submission.student_id))
+        student_name = stu_q.scalar() or ""
+
+    # Fetch assignment title
+    assignment_title = ""
+    if submission.assignment_id:
+        asgn_q = await db.execute(select(Assignment.title).where(Assignment.id == submission.assignment_id))
+        assignment_title = asgn_q.scalar() or ""
+
     return {
         "submission_id": submission_id,
+        "student_name": student_name,
+        "assignment_title": assignment_title,
+        "content": submission.content or "",
         "status": submission.status,
         "score": submission.score,
         "annotations": submission.annotations,

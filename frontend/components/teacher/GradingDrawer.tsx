@@ -218,11 +218,14 @@ export default function GradingDrawer({
                 </div>
               )}
 
-              {/* CTA */}
+              {/* Teacher action: confirm grading */}
               <div className="pt-2">
-                <button className="w-full h-10 inline-flex items-center justify-center gap-2 rounded-lg bg-ink-primary text-sm font-medium text-white transition-colors hover:bg-ink-primary-dark">
-                  <i className="ri-pencil-ruler-2-line" />
-                  开始针对练习
+                <button
+                  onClick={() => onOpenChange(false)}
+                  className="w-full h-10 inline-flex items-center justify-center gap-2 rounded-lg bg-ink-primary text-sm font-medium text-white transition-colors hover:bg-ink-primary-dark"
+                >
+                  <i className="ri-checkbox-circle-line" />
+                  确认批改结果
                 </button>
               </div>
             </div>

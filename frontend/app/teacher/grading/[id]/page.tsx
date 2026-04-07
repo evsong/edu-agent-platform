@@ -97,36 +97,41 @@ export default function GradingDetailPage({
   const { id } = use(params);
   const router = useRouter();
 
-  const { data: annotations } = useQuery({
+  // Fetch full submission result (includes student_name, content, score, annotations)
+  const { data: submission } = useQuery({
+    queryKey: ["submission-result", id],
+    queryFn: () => apiFetch<{
+      submission_id: string;
+      student_name: string;
+      assignment_title: string;
+      content: string;
+      score: number;
+      status: string;
+      annotations: any;
+    }>(`/api/grading/result/${id}`),
+  });
+
+  // Also fetch parsed annotations from the dedicated endpoint
+  const { data: parsedAnnotations } = useQuery({
     queryKey: ["grading-detail", id],
     queryFn: () => fetchGradingDetail(id),
     placeholderData: mockDetail,
   });
 
-  const { data: submission } = useQuery({
-    queryKey: ["submission-detail", id],
-    queryFn: () => apiFetch<{
-      id: string;
-      student_name?: string;
-      assignment_title?: string;
-      content?: string;
-      score?: number;
-      status?: string;
-    }>(`/api/grading/result/${id}`),
-  });
-
-  // Merge submission metadata with annotation data, falling back to mock
+  // Build the detail object from real submission data, with mock as fallback
   const detail = useMemo<GradingDetail>(() => {
-    const base = annotations ?? mockDetail;
-    if (!submission) return base;
+    if (!submission) return parsedAnnotations ?? mockDetail;
     return {
-      ...base,
-      student_name: submission.student_name || base.student_name,
-      assignment_title: submission.assignment_title || base.assignment_title,
-      content: submission.content || base.content,
-      score: submission.score ?? base.score,
+      id: submission.submission_id || id,
+      student_name: submission.student_name || mockDetail.student_name,
+      assignment_title: submission.assignment_title || mockDetail.assignment_title,
+      content: submission.content || mockDetail.content,
+      score: submission.score ?? mockDetail.score,
+      annotations: parsedAnnotations?.annotations?.length
+        ? parsedAnnotations.annotations
+        : mockDetail.annotations,
     };
-  }, [annotations, submission]);
+  }, [submission, parsedAnnotations, id]);
 
   return (
     <motion.div
