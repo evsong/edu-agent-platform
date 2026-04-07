@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { apiFetch } from "@/lib/api";
@@ -114,6 +115,8 @@ const rowVariant = {
 };
 
 export default function WarningsPage() {
+  const router = useRouter();
+
   const { data: warnings } = useQuery({
     queryKey: ["all-warnings"],
     queryFn: async () => {
@@ -262,7 +265,10 @@ export default function WarningsPage() {
                     </span>
                   </td>
                   <td className="px-5 py-3 text-right">
-                    <button className="inline-flex items-center gap-1 text-xs font-medium text-ink-primary hover:text-ink-primary-dark transition-colors">
+                    <button
+                      onClick={() => router.push(`/teacher/grading`)}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-ink-primary hover:text-ink-primary-dark transition-colors cursor-pointer"
+                    >
                       <i className="ri-eye-line" />
                       查看详情
                     </button>
