@@ -1,8 +1,10 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { motion } from "framer-motion";
-import { fetchAgents } from "@/lib/queries";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { motion, AnimatePresence } from "framer-motion";
+import { apiFetch } from "@/lib/api";
+import { fetchAgents, fetchCourses } from "@/lib/queries";
 import type { AgentConfig } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
@@ -89,14 +91,68 @@ const cardVariant = {
   },
 };
 
+interface EditForm {
+  model: string;
+  temperature: number;
+  knowledge_base: string;
+  grading_rules: string;
+}
+
 export default function AgentsPage() {
+  const queryClient = useQueryClient();
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<EditForm>({ model: "", temperature: 0.3, knowledge_base: "", grading_rules: "" });
+  const [showCreate, setShowCreate] = useState(false);
+  const [createForm, setCreateForm] = useState({ name: "", course_id: "", agent_id: "qa", model: "GPT-5.4", temperature: 0.3, knowledge_base: "", grading_rules: "", icon: "ri-robot-2-line" });
+
   const { data: agents } = useQuery({
     queryKey: ["agents"],
     queryFn: fetchAgents,
     placeholderData: mockAgents,
   });
 
+  const { data: courses } = useQuery({
+    queryKey: ["courses-for-agent"],
+    queryFn: fetchCourses,
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: (id: string) =>
+      apiFetch(`/api/agents/${id}/toggle`, { method: "POST" }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["agents"] }),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<EditForm> }) =>
+      apiFetch(`/api/agents/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
+      setEditingId(null);
+    },
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (data: typeof createForm) =>
+      apiFetch("/api/agents", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
+      setShowCreate(false);
+      setCreateForm({ name: "", course_id: "", agent_id: "qa", model: "GPT-5.4", temperature: 0.3, knowledge_base: "", grading_rules: "", icon: "ri-robot-2-line" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) =>
+      apiFetch(`/api/agents/${id}`, { method: "DELETE" }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["agents"] }),
+  });
+
   const list = agents ?? mockAgents;
+
+  const startEdit = (agent: AgentConfig) => {
+    setEditingId(agent.id);
+    setEditForm({ model: agent.model, temperature: agent.temperature, knowledge_base: agent.knowledge_base, grading_rules: agent.grading_rules });
+  };
 
   return (
     <motion.div initial="hidden" animate="visible" variants={stagger} className="space-y-6">
@@ -109,11 +165,65 @@ export default function AgentsPage() {
             管理各课程的 AI Agent 实例
           </p>
         </div>
-        <button className="inline-flex h-9 items-center gap-2 rounded-lg bg-ink-primary px-4 text-sm font-medium text-white transition-colors hover:bg-ink-primary-dark self-start sm:self-auto">
-          <i className="ri-add-line" />
-          新建 Agent
+        <button
+          onClick={() => setShowCreate((v) => !v)}
+          className="inline-flex h-9 items-center gap-2 rounded-lg bg-ink-primary px-4 text-sm font-medium text-white transition-colors hover:bg-ink-primary-dark self-start sm:self-auto"
+        >
+          <i className={showCreate ? "ri-close-line" : "ri-add-line"} />
+          {showCreate ? "取消" : "新建 Agent"}
         </button>
       </div>
+
+      <AnimatePresence>
+        {showCreate && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden rounded-xl border border-ink-primary/20 bg-ink-primary-lighter/30 p-5"
+          >
+            <h3 className="text-sm font-heading font-semibold text-ink-text mb-3">创建新 Agent</h3>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div>
+                <label className="text-[10px] font-medium text-ink-text-light uppercase">名称</label>
+                <input className="mt-1 w-full rounded-lg border border-ink-border px-3 py-1.5 text-sm" value={createForm.name} onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))} placeholder="数学答疑助手" />
+              </div>
+              <div>
+                <label className="text-[10px] font-medium text-ink-text-light uppercase">课程</label>
+                <select className="mt-1 w-full rounded-lg border border-ink-border px-3 py-1.5 text-sm" value={createForm.course_id} onChange={(e) => setCreateForm((f) => ({ ...f, course_id: e.target.value }))}>
+                  <option value="">选择课程</option>
+                  {(courses || []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-medium text-ink-text-light uppercase">Agent 类型</label>
+                <select className="mt-1 w-full rounded-lg border border-ink-border px-3 py-1.5 text-sm" value={createForm.agent_id} onChange={(e) => setCreateForm((f) => ({ ...f, agent_id: e.target.value }))}>
+                  <option value="qa">QA 答疑</option>
+                  <option value="grader">批改</option>
+                  <option value="tutor">辅导</option>
+                  <option value="analyst">分析</option>
+                  <option value="meta">元配置</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-medium text-ink-text-light uppercase">模型</label>
+                <select className="mt-1 w-full rounded-lg border border-ink-border px-3 py-1.5 text-sm" value={createForm.model} onChange={(e) => setCreateForm((f) => ({ ...f, model: e.target.value }))}>
+                  <option value="GPT-5.4">GPT-5.4</option>
+                  <option value="Claude 4 Sonnet">Claude 4 Sonnet</option>
+                  <option value="GPT-5">GPT-5</option>
+                </select>
+              </div>
+            </div>
+            <button
+              onClick={() => createForm.name && createForm.course_id && createMutation.mutate(createForm)}
+              disabled={!createForm.name || !createForm.course_id || createMutation.isPending}
+              className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-lg bg-ink-primary px-4 text-xs font-medium text-white hover:bg-ink-primary-dark disabled:opacity-50"
+            >
+              {createMutation.isPending ? <><i className="ri-loader-4-line animate-spin" /> 创建中...</> : <><i className="ri-add-line" /> 创建</>}
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {list.map((agent) => {
@@ -194,22 +304,81 @@ export default function AgentsPage() {
 
               {/* Actions */}
               <div className="mt-4 flex gap-2">
-                <button className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-ink-border bg-white px-3 text-xs font-medium text-ink-text transition-colors hover:bg-ink-surface">
-                  <i className="ri-settings-3-line text-ink-text-light" />
-                  配置
+                <button
+                  onClick={() => editingId === agent.id ? setEditingId(null) : startEdit(agent)}
+                  className={cn("inline-flex h-8 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition-colors", editingId === agent.id ? "border-ink-primary bg-ink-primary-lighter text-ink-primary" : "border-ink-border bg-white text-ink-text hover:bg-ink-surface")}
+                >
+                  <i className={editingId === agent.id ? "ri-close-line" : "ri-settings-3-line"} />
+                  {editingId === agent.id ? "取消" : "配置"}
                 </button>
                 {agent.status === "running" ? (
-                  <button className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-ink-border bg-white px-3 text-xs font-medium text-ink-text transition-colors hover:bg-ink-error-light hover:text-ink-error hover:border-ink-error/20">
+                  <button
+                    onClick={() => toggleMutation.mutate(agent.id)}
+                    disabled={toggleMutation.isPending}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-ink-border bg-white px-3 text-xs font-medium text-ink-text transition-colors hover:bg-ink-error-light hover:text-ink-error hover:border-ink-error/20 disabled:opacity-50"
+                  >
                     <i className="ri-stop-circle-line" />
                     停止
                   </button>
                 ) : (
-                  <button className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-ink-primary px-3 text-xs font-medium text-white transition-colors hover:bg-ink-primary-dark">
+                  <button
+                    onClick={() => toggleMutation.mutate(agent.id)}
+                    disabled={toggleMutation.isPending}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-ink-primary px-3 text-xs font-medium text-white transition-colors hover:bg-ink-primary-dark disabled:opacity-50"
+                  >
                     <i className="ri-play-circle-line" />
                     启动
                   </button>
                 )}
+                <button
+                  onClick={() => { if (confirm(`确定删除 ${agent.name}？`)) deleteMutation.mutate(agent.id); }}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-ink-border bg-white px-3 text-xs font-medium text-ink-text-light transition-colors hover:bg-ink-error-light hover:text-ink-error hover:border-ink-error/20"
+                >
+                  <i className="ri-delete-bin-line" />
+                </button>
               </div>
+
+              {/* Inline edit form */}
+              <AnimatePresence>
+                {editingId === agent.id && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="mt-3 overflow-hidden rounded-lg border border-ink-border bg-ink-surface p-3"
+                  >
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] font-medium text-ink-text-light uppercase">模型</label>
+                        <select className="mt-1 w-full rounded-lg border border-ink-border bg-white px-2 py-1 text-xs" value={editForm.model} onChange={(e) => setEditForm((f) => ({ ...f, model: e.target.value }))}>
+                          <option>GPT-5.4</option>
+                          <option>Claude 4 Sonnet</option>
+                          <option>GPT-5</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-medium text-ink-text-light uppercase">温度</label>
+                        <input type="number" step="0.1" min="0" max="2" className="mt-1 w-full rounded-lg border border-ink-border bg-white px-2 py-1 text-xs" value={editForm.temperature} onChange={(e) => setEditForm((f) => ({ ...f, temperature: parseFloat(e.target.value) || 0 }))} />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-medium text-ink-text-light uppercase">知识库</label>
+                        <input className="mt-1 w-full rounded-lg border border-ink-border bg-white px-2 py-1 text-xs" value={editForm.knowledge_base} onChange={(e) => setEditForm((f) => ({ ...f, knowledge_base: e.target.value }))} />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-medium text-ink-text-light uppercase">评分规则</label>
+                        <input className="mt-1 w-full rounded-lg border border-ink-border bg-white px-2 py-1 text-xs" value={editForm.grading_rules} onChange={(e) => setEditForm((f) => ({ ...f, grading_rules: e.target.value }))} />
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => updateMutation.mutate({ id: agent.id, data: editForm })}
+                      disabled={updateMutation.isPending}
+                      className="mt-2 inline-flex h-7 items-center gap-1.5 rounded-lg bg-ink-primary px-3 text-xs font-medium text-white hover:bg-ink-primary-dark disabled:opacity-50"
+                    >
+                      {updateMutation.isPending ? <><i className="ri-loader-4-line animate-spin" /> 保存中...</> : <><i className="ri-check-line" /> 保存</>}
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </motion.div>
           );
         })}
