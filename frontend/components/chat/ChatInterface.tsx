@@ -1,7 +1,11 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { cn } from "@/lib/utils";
+import ReactMarkdown from "react-markdown";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 
 /* ── Types ── */
 interface ChatAction {
@@ -279,11 +283,17 @@ export default function ChatInterface({
               {/* Content */}
               <div
                 className={cn(
-                  "text-sm whitespace-pre-wrap leading-relaxed break-words",
-                  msg.role === "user" ? "text-white" : "text-ink-text",
+                  "text-sm leading-relaxed break-words",
+                  msg.role === "user" ? "text-white" : "text-ink-text prose prose-sm max-w-none prose-headings:text-ink-text prose-p:my-1 prose-li:my-0",
                 )}
               >
-                {msg.content}
+                {msg.role === "assistant" ? (
+                  <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                    {msg.content}
+                  </ReactMarkdown>
+                ) : (
+                  <span className="whitespace-pre-wrap">{msg.content}</span>
+                )}
                 {/* Typing indicator */}
                 {msg.role === "assistant" &&
                   isStreaming &&
