@@ -13,6 +13,11 @@ class UserCreate(BaseModel):
     role: str = Field(default="student", pattern="^(teacher|student)$")
 
 
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(..., min_length=1, max_length=128)
+
+
 class UserResponse(BaseModel):
     id: uuid.UUID
     email: str
