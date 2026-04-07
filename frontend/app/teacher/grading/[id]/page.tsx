@@ -110,7 +110,7 @@ export default function GradingDetailPage({
     >
       {/* Back link + header */}
       <button
-        onClick={() => router.push("/grading")}
+        onClick={() => router.push("/teacher/grading")}
         className="flex items-center gap-1.5 text-sm text-ink-text-muted hover:text-ink-primary transition-colors"
       >
         <i className="ri-arrow-left-line" />
@@ -125,7 +125,7 @@ export default function GradingDetailPage({
       <GradingDrawer
         open={true}
         onOpenChange={(open) => {
-          if (!open) router.push("/grading");
+          if (!open) router.push("/teacher/grading");
         }}
         detail={detail ?? mockDetail}
       />

@@ -16,39 +16,39 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   {
-    href: "/dashboard",
+    href: "/teacher/dashboard",
     icon: "ri-dashboard-3-line",
     label: "仪表盘",
   },
   {
-    href: "/courses",
+    href: "/teacher/courses",
     icon: "ri-book-open-line",
     label: "课程管理",
     children: [
-      { href: "/courses", label: "全部课程" },
+      { href: "/teacher/courses", label: "全部课程" },
     ],
   },
   {
-    href: "/agents",
+    href: "/teacher/agents",
     icon: "ri-robot-2-line",
     label: "Agent 配置",
   },
   {
-    href: "/grading",
+    href: "/teacher/grading",
     icon: "ri-file-check-line",
     label: "批改队列",
     badge: 12,
     badgeColor: "bg-ink-primary",
   },
   {
-    href: "/warnings",
+    href: "/teacher/warnings",
     icon: "ri-alarm-warning-line",
     label: "预警中心",
     badge: 3,
     badgeColor: "bg-ink-error",
   },
   {
-    href: "/settings",
+    href: "/teacher/settings",
     icon: "ri-settings-3-line",
     label: "设置",
   },
@@ -58,7 +58,7 @@ function SidebarItem({ item }: { item: NavItem }) {
   const pathname = usePathname();
   const isActive =
     pathname === item.href ||
-    (item.href !== "/dashboard" && pathname.startsWith(item.href));
+    (item.href !== "/teacher/dashboard" && pathname.startsWith(item.href));
 
   return (
     <li>

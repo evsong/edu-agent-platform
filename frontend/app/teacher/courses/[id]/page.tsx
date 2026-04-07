@@ -49,7 +49,7 @@ export default function CourseDetailPage({
     >
       {/* Breadcrumb */}
       <nav className="flex items-center gap-1.5 text-sm text-ink-text-muted">
-        <Link href="/courses" className="hover:text-ink-primary transition-colors">
+        <Link href="/teacher/courses" className="hover:text-ink-primary transition-colors">
           课程管理
         </Link>
         <i className="ri-arrow-right-s-line text-ink-text-light" />
@@ -71,14 +71,14 @@ export default function CourseDetailPage({
         </div>
         <div className="flex gap-2">
           <Link
-            href={`/courses/${id}/knowledge`}
+            href={`/teacher/courses/${id}/knowledge`}
             className="inline-flex h-9 items-center gap-2 rounded-lg border border-ink-border bg-white px-3 sm:px-4 text-sm font-medium text-ink-text transition-colors hover:bg-ink-surface"
           >
             <i className="ri-database-2-line text-ink-primary" />
             知识库
           </Link>
           <Link
-            href={`/courses/${id}/analytics`}
+            href={`/teacher/courses/${id}/analytics`}
             className="inline-flex h-9 items-center gap-2 rounded-lg border border-ink-border bg-white px-3 sm:px-4 text-sm font-medium text-ink-text transition-colors hover:bg-ink-surface"
           >
             <i className="ri-line-chart-line text-ink-primary" />

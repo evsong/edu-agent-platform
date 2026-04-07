@@ -5,8 +5,8 @@
 
 const getBaseUrl = () =>
   typeof window !== "undefined"
-    ? process.env.NEXT_PUBLIC_API_URL || ""
-    : process.env.NEXT_PUBLIC_API_URL || "";
+    ? "" // Client-side: relative URL, nginx proxies /api/ to backend
+    : (process.env.NEXT_PUBLIC_API_URL || "http://backend:8000"); // Server-side: Docker internal
 
 export async function apiFetch<T = unknown>(
   path: string,

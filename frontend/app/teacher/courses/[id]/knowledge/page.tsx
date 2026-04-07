@@ -119,12 +119,12 @@ export default function KnowledgeBasePage({
     >
       {/* Breadcrumb */}
       <nav className="flex items-center gap-1.5 text-sm text-ink-text-muted">
-        <Link href="/courses" className="hover:text-ink-primary transition-colors">
+        <Link href="/teacher/courses" className="hover:text-ink-primary transition-colors">
           课程管理
         </Link>
         <i className="ri-arrow-right-s-line text-ink-text-light" />
         <Link
-          href={`/courses/${id}`}
+          href={`/teacher/courses/${id}`}
           className="hover:text-ink-primary transition-colors"
         >
           课程详情

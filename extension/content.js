@@ -2,7 +2,7 @@
   "use strict";
 
   // Embed URL — the (embed) route group popup page at /popup
-  var EMBED_URL = "https://eduagent.inspiredjinyao.com/popup";
+  var EMBED_URL = "https://eduagent.inspiredjinyao.com/embed/popup";
 
   // Prevent double injection
   if (document.getElementById("eduagent-host")) return;

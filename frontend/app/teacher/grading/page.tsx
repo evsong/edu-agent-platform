@@ -186,7 +186,7 @@ export default function GradingQueuePage() {
                 key={sub.id}
                 variants={rowVariant}
                 className="flex items-center gap-3 px-3 py-3 sm:gap-4 sm:px-5 sm:py-4 cursor-pointer transition-colors hover:bg-ink-surface/50"
-                onClick={() => router.push(`/grading/${sub.id}`)}
+                onClick={() => router.push(`/teacher/grading/${sub.id}`)}
               >
                 {/* File icon */}
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-ink-surface">

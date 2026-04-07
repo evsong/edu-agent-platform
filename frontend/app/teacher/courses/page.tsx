@@ -95,7 +95,7 @@ export default function CoursesPage() {
         {list.map((course) => (
           <motion.div key={course.id} variants={cardVariant}>
             <Link
-              href={`/courses/${course.id}`}
+              href={`/teacher/courses/${course.id}`}
               className="group block rounded-xl border border-ink-border bg-white p-5 transition-all hover:border-ink-primary/20 hover:shadow-lg hover:shadow-ink-primary/5"
             >
               <div className="flex items-start gap-4">

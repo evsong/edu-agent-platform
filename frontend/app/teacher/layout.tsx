@@ -9,31 +9,31 @@ import { MobileTabBar } from "@/components/shared/MobileTabBar";
 
 const teacherTabs = [
   {
-    href: "/dashboard",
+    href: "/teacher/dashboard",
     icon: "ri-dashboard-3-line",
     activeIcon: "ri-dashboard-3-fill",
     label: "总览",
   },
   {
-    href: "/courses",
+    href: "/teacher/courses",
     icon: "ri-book-open-line",
     activeIcon: "ri-book-open-fill",
     label: "课程",
   },
   {
-    href: "/grading",
+    href: "/teacher/grading",
     icon: "ri-file-check-line",
     activeIcon: "ri-file-check-fill",
     label: "批改",
   },
   {
-    href: "/warnings",
+    href: "/teacher/warnings",
     icon: "ri-bar-chart-box-line",
     activeIcon: "ri-bar-chart-box-fill",
     label: "学情",
   },
   {
-    href: "/agents",
+    href: "/teacher/agents",
     icon: "ri-robot-2-line",
     activeIcon: "ri-robot-2-fill",
     label: "Agent",
@@ -71,7 +71,7 @@ export default function TeacherLayout({
           <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-ink-border bg-white/80 px-4 backdrop-blur-md md:px-6">
             {/* Mobile logo + hamburger area */}
             <div className="flex items-center gap-2 md:hidden">
-              <Link href="/dashboard" className="flex items-center gap-2">
+              <Link href="/teacher/dashboard" className="flex items-center gap-2">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-ink-primary text-white">
                   <i className="ri-brain-line text-base" />
                 </div>

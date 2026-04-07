@@ -40,7 +40,7 @@ export default function LoginPage() {
       if (payload.role === "teacher" || payload.role === "admin") {
         router.push("/teacher/dashboard");
       } else {
-        router.push("/student/courses");
+        router.push("/s/courses");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "登录失败，请重试");

@@ -44,42 +44,42 @@ export default function CommandPalette() {
       id: "dashboard",
       icon: "ri-dashboard-3-line",
       label: "仪表盘",
-      action: () => navigate("/dashboard"),
+      action: () => navigate("/teacher/dashboard"),
       group: "导航",
     },
     {
       id: "courses",
       icon: "ri-book-open-line",
       label: "课程管理",
-      action: () => navigate("/courses"),
+      action: () => navigate("/teacher/courses"),
       group: "导航",
     },
     {
       id: "grading",
       icon: "ri-file-check-line",
       label: "批改队列",
-      action: () => navigate("/grading"),
+      action: () => navigate("/teacher/grading"),
       group: "导航",
     },
     {
       id: "agents",
       icon: "ri-robot-2-line",
       label: "Agent 配置",
-      action: () => navigate("/agents"),
+      action: () => navigate("/teacher/agents"),
       group: "导航",
     },
     {
       id: "warnings",
       icon: "ri-alarm-warning-line",
       label: "预警中心",
-      action: () => navigate("/warnings"),
+      action: () => navigate("/teacher/warnings"),
       group: "导航",
     },
     {
       id: "settings",
       icon: "ri-settings-3-line",
       label: "设置",
-      action: () => navigate("/settings"),
+      action: () => navigate("/teacher/settings"),
       group: "导航",
     },
     {
@@ -97,7 +97,7 @@ export default function CommandPalette() {
       icon: "ri-robot-2-line",
       label: "批改所有作业",
       action: () => {
-        navigate("/grading");
+        navigate("/teacher/grading");
       },
       isAI: true,
       group: "AI 指令",
