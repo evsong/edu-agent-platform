@@ -38,6 +38,20 @@ class BKTUpdateRequest(BaseModel):
 # ── Endpoints ──────────────────────────────────────────────────────
 
 
+@router.get("/overview")
+async def get_overview(db: AsyncSession = Depends(get_db)):
+    """Return aggregated dashboard stats across all courses."""
+    svc = _get_service()
+    return await svc.get_overview(db)
+
+
+@router.get("/mastery/{course_id}")
+async def get_mastery(course_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    """Return average mastery per knowledge point for a course."""
+    svc = _get_service()
+    return await svc.get_mastery_aggregation(db, course_id)
+
+
 @router.get("/profile/{user_id}")
 async def get_profile(
     user_id: uuid.UUID,
