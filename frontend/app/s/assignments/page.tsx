@@ -128,11 +128,51 @@ const rowVariant = {
   },
 };
 
+/* ── Helpers ── */
+
+const courseIconMap: Record<string, string> = {
+  "数学": "ri-function-add-line",
+  "高等数学": "ri-function-add-line",
+  "物理": "ri-flashlight-line",
+  "大学物理": "ri-flashlight-line",
+  "数据结构": "ri-code-s-slash-line",
+  "算法": "ri-code-s-slash-line",
+  "编程": "ri-code-s-slash-line",
+};
+
+function deriveCourseIcon(courseName: string): string {
+  for (const [key, icon] of Object.entries(courseIconMap)) {
+    if (courseName.includes(key)) return icon;
+  }
+  return "ri-book-open-line";
+}
+
+interface SubmissionResponse {
+  id: string;
+  assignment_id: string;
+  assignment_title: string;
+  course_name: string;
+  status: string;
+  score?: number;
+  submitted_at?: string;
+  due_date?: string;
+}
+
 export default function AssignmentsPage() {
   const { data: assignments } = useQuery({
     queryKey: ["student-assignments"],
-    queryFn: () =>
-      apiFetch<StudentAssignment[]>("/api/grading/submissions?role=student"),
+    queryFn: async () => {
+      const data = await apiFetch<SubmissionResponse[]>("/api/submissions/mine");
+      return data.map((s): StudentAssignment => ({
+        id: s.id,
+        title: s.assignment_title,
+        course_name: s.course_name,
+        course_icon: deriveCourseIcon(s.course_name),
+        due_date: s.due_date || s.submitted_at || new Date().toISOString(),
+        status: (s.status as StudentAssignment["status"]) || "pending",
+        score: s.score,
+      }));
+    },
     placeholderData: mockAssignments,
   });
 

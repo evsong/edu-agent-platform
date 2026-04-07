@@ -111,8 +111,25 @@ export default function AssignmentDetailPage({
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
-  // Determine if this is a graded assignment based on mock data
-  const isGraded = id === "asgn-4" || id === "asgn-5";
+  // Fetch submission info to determine status dynamically
+  const { data: submissionInfo } = useQuery({
+    queryKey: ["submission-info", id],
+    queryFn: async () => {
+      try {
+        const subs = await apiFetch<{ id: string; status?: string }[]>("/api/submissions/mine");
+        return subs.find((s) => s.id === id) ?? null;
+      } catch {
+        return null;
+      }
+    },
+  });
+
+  // Determine graded status: from API if available, fallback to mock IDs
+  const isGraded =
+    submissionInfo?.status === "graded" ||
+    submissionInfo?.status === "ai_graded" ||
+    submissionInfo?.status === "teacher_graded" ||
+    (!submissionInfo && (id === "asgn-4" || id === "asgn-5"));
 
   const { data: gradingDetail } = useQuery({
     queryKey: ["student-grading-detail", id],
@@ -127,7 +144,7 @@ export default function AssignmentDetailPage({
     try {
       await apiFetch("/api/grading/submit", {
         method: "POST",
-        body: JSON.stringify({ submission_id: id, content: answer }),
+        body: JSON.stringify({ submission_id: id }),
       });
       setSubmitted(true);
     } catch {

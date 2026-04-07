@@ -1,10 +1,16 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import PracticeCard from "@/components/student/PracticeCard";
 import EnergyRing from "@/components/student/EnergyRing";
+import { useAuth } from "@/lib/auth";
 import { apiFetch } from "@/lib/api";
+
+/* ── Constants ── */
+
+const MATH_COURSE_ID = "00000000-0000-4000-b000-000000000001";
 
 /* ── Types ── */
 
@@ -22,7 +28,27 @@ interface KnowledgePoint {
   mastery: number;
 }
 
-/* ── Mock data ── */
+interface AnswerResult {
+  is_correct: boolean;
+  correct_answer: string;
+  explanation: string;
+  updated_profile?: {
+    bkt_states?: Record<string, { mastery: number }>;
+    overall_mastery?: number;
+  };
+}
+
+interface PracticeExerciseResponse {
+  exercise?: Exercise;
+  id?: string;
+  question?: string;
+  options?: { key: string; text: string }[];
+  correct_answer?: string;
+  explanation?: string;
+  knowledge_point?: string;
+}
+
+/* ── Mock data (fallback) ── */
 
 const mockKnowledgePoints: KnowledgePoint[] = [
   { name: "导数定义", mastery: 0.85 },
@@ -106,63 +132,140 @@ const mockExercises: Exercise[] = [
   },
 ];
 
+/* ── Helpers ── */
+
+/** Normalize the API response into a flat Exercise object */
+function normalizeExercise(
+  resp: PracticeExerciseResponse,
+): Exercise | null {
+  const ex = resp.exercise ?? resp;
+  if (!ex.question || !ex.options) return null;
+  return {
+    id: ex.id ?? `api-${Date.now()}`,
+    question: ex.question,
+    options: ex.options,
+    correct_answer: ex.correct_answer ?? "",
+    explanation: ex.explanation ?? "",
+    knowledge_point: ex.knowledge_point ?? "",
+  };
+}
+
 const stagger = {
   hidden: {},
   visible: { transition: { staggerChildren: 0.06 } },
 };
 
 export default function PracticePage() {
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [knowledgePoints, setKnowledgePoints] = useState(mockKnowledgePoints);
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
   const [answeredCount, setAnsweredCount] = useState(0);
+  const [showResult, setShowResult] = useState(false);
+  const [lastResult, setLastResult] = useState<AnswerResult | null>(null);
   const [selectedCourse] = useState("高等数学 A");
+  // Fallback index for mock exercises when API is unavailable
+  const [mockIndex, setMockIndex] = useState(0);
 
-  const exercises = mockExercises;
-  const currentExercise = exercises[currentIndex];
-
-  const handleSubmitAnswer = useCallback(
-    async (answer: string) => {
-      // Try API call, fallback to local mock
-      try {
-        await apiFetch("/api/practice/answer", {
+  /* ── Fetch exercise from API ── */
+  const { data: apiExercise, refetch: fetchNextExercise } = useQuery({
+    queryKey: ["practice-exercise"],
+    queryFn: async () => {
+      const resp = await apiFetch<PracticeExerciseResponse>(
+        "/api/practice/generate",
+        {
           method: "POST",
           body: JSON.stringify({
-            user_id: "current-user",
-            course_id: "math-101",
-            exercise_id: currentExercise.id,
-            answer,
-            knowledge_point_id: currentExercise.knowledge_point,
+            user_id: user!.id,
+            course_id: MATH_COURSE_ID,
           }),
-        });
-      } catch {
-        // Demo mode
-      }
+        },
+      );
+      return normalizeExercise(resp);
+    },
+    enabled: !!user?.id,
+    retry: false,
+  });
 
+  /* ── Fetch mastery profile ── */
+  const { data: profile } = useQuery({
+    queryKey: ["practice-profile", user?.id],
+    queryFn: () =>
+      apiFetch<{
+        overall_mastery?: number;
+        bkt_states?: Record<string, { mastery: number; name?: string }>;
+      }>(`/api/analytics/profile/${user!.id}?course_id=${MATH_COURSE_ID}`),
+    enabled: !!user?.id,
+  });
+
+  // Derive knowledge points from profile or fall back to mock
+  const knowledgePoints: KnowledgePoint[] = profile?.bkt_states
+    ? Object.entries(profile.bkt_states).map(([key, val]) => ({
+        name: val.name || key,
+        mastery: val.mastery ?? 0,
+      }))
+    : mockKnowledgePoints;
+
+  // Current exercise: prefer API, fall back to mock
+  const currentExercise = apiExercise ?? mockExercises[mockIndex] ?? mockExercises[0];
+  const totalExercises = apiExercise ? answeredCount + 5 : mockExercises.length;
+
+  /* ── Submit answer mutation ── */
+  const answerMutation = useMutation({
+    mutationFn: async (answer: string) => {
+      const resp = await apiFetch<AnswerResult>("/api/practice/answer", {
+        method: "POST",
+        body: JSON.stringify({
+          user_id: user!.id,
+          course_id: MATH_COURSE_ID,
+          exercise_id: currentExercise.id,
+          answer,
+        }),
+      });
+      return resp;
+    },
+    onSuccess: (data) => {
+      setLastResult(data);
+      setShowResult(true);
       setAnsweredCount((c) => c + 1);
 
-      // Simulate BKT update
-      const isCorrect = answer === currentExercise.correct_answer;
-      setKnowledgePoints((prev) =>
-        prev.map((kp) => {
-          if (kp.name === currentExercise.knowledge_point) {
-            const delta = isCorrect ? 0.05 : -0.03;
-            return {
-              ...kp,
-              mastery: Math.max(0, Math.min(1, kp.mastery + delta)),
-            };
-          }
-          return kp;
-        }),
-      );
+      // Refresh profile to update mastery rings
+      queryClient.invalidateQueries({
+        queryKey: ["practice-profile", user?.id],
+      });
 
-      // Move to next after delay
+      // After delay, fetch next exercise
       setTimeout(() => {
-        if (currentIndex < exercises.length - 1) {
-          setCurrentIndex((i) => i + 1);
+        setShowResult(false);
+        setLastResult(null);
+        fetchNextExercise();
+      }, 2500);
+    },
+    onError: () => {
+      // API failed — use local mock fallback behavior
+      setAnsweredCount((c) => c + 1);
+      setTimeout(() => {
+        if (mockIndex < mockExercises.length - 1) {
+          setMockIndex((i) => i + 1);
         }
       }, 2000);
     },
-    [currentExercise, currentIndex, exercises.length],
+  });
+
+  const handleSubmitAnswer = useCallback(
+    (answer: string) => {
+      if (user?.id) {
+        answerMutation.mutate(answer);
+      } else {
+        // No user — pure local mock fallback
+        setAnsweredCount((c) => c + 1);
+        setTimeout(() => {
+          if (mockIndex < mockExercises.length - 1) {
+            setMockIndex((i) => i + 1);
+          }
+        }, 2000);
+      }
+    },
+    [user?.id, answerMutation, mockIndex],
   );
 
   const currentKP = knowledgePoints.find(
@@ -194,7 +297,7 @@ export default function PracticePage() {
         <div className="text-right">
           <p className="text-xs text-ink-text-muted">已完成</p>
           <p className="text-lg font-heading font-bold text-ink-primary">
-            {answeredCount}/{exercises.length}
+            {answeredCount}
           </p>
         </div>
       </div>
@@ -233,16 +336,20 @@ export default function PracticePage() {
           key={currentExercise.id}
           question={currentExercise.question}
           options={currentExercise.options}
-          correctAnswer={currentExercise.correct_answer}
-          explanation={currentExercise.explanation}
+          correctAnswer={
+            lastResult?.correct_answer || currentExercise.correct_answer
+          }
+          explanation={
+            lastResult?.explanation || currentExercise.explanation
+          }
           onSubmit={handleSubmitAnswer}
-          current={currentIndex + 1}
-          total={exercises.length}
+          current={answeredCount + 1}
+          total={totalExercises}
         />
       )}
 
-      {/* Completion message */}
-      {answeredCount >= exercises.length && (
+      {/* Completion message (only for mock mode) */}
+      {!apiExercise && answeredCount >= mockExercises.length && (
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
