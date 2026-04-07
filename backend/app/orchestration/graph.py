@@ -78,7 +78,8 @@ async def agent_generate_node(state: DirectorState, config: dict) -> dict:
         "agent_responses": [
             {"agent_id": agent_id, "content": "".join(text_chunks)}
         ],
-        "current_agent_id": None,  # reset so Director can route again
+        "current_agent_id": None,
+        "should_end": True,  # One agent response per user message — no loop
     }
 
 

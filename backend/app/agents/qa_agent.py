@@ -11,13 +11,13 @@ from app.orchestration.events import Action, TextDelta, Thinking
 
 logger = logging.getLogger(__name__)
 
-_QA_SYSTEM_PROMPT = """\
+_QA_SYSTEM_PROMPT_WITH_RAG = """\
 你是 EduAgent 智能答疑助手。根据以下检索到的课程资料回答学生问题。
 
 要求：
-1. 答案必须基于提供的参考资料，不要编造内容。
-2. 如果资料不足以回答，请诚实告知并建议学生询问老师。
-3. 用清晰、简洁的中文回答。
+1. 优先基于提供的参考资料回答。
+2. 用清晰、简洁的中文回答，适合大学生理解。
+3. 如果涉及公式，用规范的数学表达。
 4. 在回答末尾标注引用来源。
 
 参考资料:
@@ -25,6 +25,17 @@ _QA_SYSTEM_PROMPT = """\
 
 跨课程关联知识点:
 {cross_hints}\
+"""
+
+_QA_SYSTEM_PROMPT_GENERAL = """\
+你是 EduAgent 智能答疑助手，专注于高等数学和大学物理的教学辅助。
+
+要求：
+1. 用清晰、准确的中文回答学生问题。
+2. 适合大学本科生的理解水平。
+3. 如果涉及公式，用规范的数学表达。
+4. 可以举例说明帮助理解。
+5. 回答要简洁但完整，不要重复啰嗦。\
 """
 
 
@@ -78,10 +89,14 @@ class QAAgent(BaseAgent):
             sources = []
 
         # ── Step 3: Stream LLM response ──────────────────────────────
-        system_prompt = _QA_SYSTEM_PROMPT.format(
-            context=context_text,
-            cross_hints=cross_hints_text,
-        )
+        if results:
+            system_prompt = _QA_SYSTEM_PROMPT_WITH_RAG.format(
+                context=context_text,
+                cross_hints=cross_hints_text,
+            )
+        else:
+            # No RAG data — use general teaching mode
+            system_prompt = _QA_SYSTEM_PROMPT_GENERAL
 
         yield Thinking(stage="generating_answer")
 
