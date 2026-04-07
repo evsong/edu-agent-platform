@@ -6,6 +6,8 @@ import { useState } from "react";
 import Sidebar from "@/components/teacher/Sidebar";
 import CommandPalette from "@/components/teacher/CommandPalette";
 import { MobileTabBar } from "@/components/shared/MobileTabBar";
+import NotificationBell from "@/components/shared/NotificationBell";
+import UserMenu from "@/components/shared/UserMenu";
 
 const teacherTabs = [
   {
@@ -82,25 +84,29 @@ export default function TeacherLayout({
             </div>
             {/* Desktop spacer */}
             <div className="hidden md:block" />
-            <button
-              className="flex items-center gap-2 rounded-lg border border-ink-border bg-ink-surface px-3 py-1.5 text-xs text-ink-text-light transition-colors hover:border-ink-primary/30 hover:text-ink-text"
-              onClick={() => {
-                // Trigger CMD+K
-                document.dispatchEvent(
-                  new KeyboardEvent("keydown", {
-                    key: "k",
-                    metaKey: true,
-                    bubbles: true,
-                  }),
-                );
-              }}
-            >
-              <i className="ri-search-line" />
-              <span className="hidden sm:inline">搜索...</span>
-              <kbd className="ml-4 hidden rounded border border-ink-border bg-white px-1 text-[10px] font-medium sm:inline">
-                ⌘K
-              </kbd>
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                className="flex items-center gap-2 rounded-lg border border-ink-border bg-ink-surface px-3 py-1.5 text-xs text-ink-text-light transition-colors hover:border-ink-primary/30 hover:text-ink-text"
+                onClick={() => {
+                  // Trigger CMD+K
+                  document.dispatchEvent(
+                    new KeyboardEvent("keydown", {
+                      key: "k",
+                      metaKey: true,
+                      bubbles: true,
+                    }),
+                  );
+                }}
+              >
+                <i className="ri-search-line" />
+                <span className="hidden sm:inline">搜索...</span>
+                <kbd className="ml-4 hidden rounded border border-ink-border bg-white px-1 text-[10px] font-medium sm:inline">
+                  ⌘K
+                </kbd>
+              </button>
+              <NotificationBell />
+              <UserMenu />
+            </div>
           </header>
 
           {/* Page content */}

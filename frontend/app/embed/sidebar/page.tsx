@@ -1,6 +1,6 @@
 "use client";
 
-import { CopilotSidebar } from "@copilotkit/react-ui";
+import ChatInterface from "@/components/chat/ChatInterface";
 
 const quickQuestions = [
   "什么是定积分？",
@@ -10,16 +10,9 @@ const quickQuestions = [
 
 export default function SidebarPage() {
   return (
-    <CopilotSidebar
-      labels={{
-        title: "AI 助教",
-        initial: "你好！我是高数 AI 助教。",
-        placeholder: "输入问题...",
-      }}
-      defaultOpen={true}
-      instructions="你是 EduAgent 平台的 AI 助教。用中文回答学生问题。帮助学生理解知识点，解答疑问，提供练习建议。回答要清晰、有条理，适当使用公式和例子。"
-    >
-      <div className="p-6">
+    <div className="flex min-h-screen">
+      {/* Main content area */}
+      <div className="flex-1 p-6">
         <h2 className="font-heading text-lg font-semibold mb-4">快捷操作</h2>
         <div className="flex flex-wrap gap-2">
           {quickQuestions.map((q) => (
@@ -32,6 +25,23 @@ export default function SidebarPage() {
           ))}
         </div>
       </div>
-    </CopilotSidebar>
+
+      {/* Sidebar chat panel */}
+      <aside className="w-[380px] shrink-0 border-l border-ink-border bg-white flex flex-col">
+        {/* Header */}
+        <div className="flex items-center gap-2 border-b border-ink-border px-4 py-3">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-ink-primary text-white">
+            <i className="ri-brain-line text-sm" />
+          </div>
+          <span className="text-sm font-heading font-semibold text-ink-text">
+            AI 助教
+          </span>
+        </div>
+        {/* Chat body */}
+        <div className="flex-1 overflow-hidden">
+          <ChatInterface courseId="math-101" className="h-full" />
+        </div>
+      </aside>
+    </div>
   );
 }

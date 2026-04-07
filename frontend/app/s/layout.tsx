@@ -4,11 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { CopilotKit } from "@copilotkit/react-core";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { MobileTabBar } from "@/components/shared/MobileTabBar";
-import "@copilotkit/react-ui/styles.css";
+import NotificationBell from "@/components/shared/NotificationBell";
+import UserMenu from "@/components/shared/UserMenu";
 
 const studentTabs = [
   {
@@ -117,12 +117,8 @@ function StudentNavbar() {
 
       {/* Right section */}
       <div className="ml-auto flex items-center gap-3">
-        <button className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-text-light transition-colors hover:bg-ink-surface hover:text-ink-text">
-          <i className="ri-notification-3-line text-lg" />
-        </button>
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-ink-primary-lighter text-xs font-bold text-ink-primary">
-          S
-        </div>
+        <NotificationBell />
+        <UserMenu />
       </div>
     </motion.header>
   );
@@ -147,15 +143,13 @@ export default function StudentLayout({
 
   return (
     <QueryClientProvider client={queryClient}>
-      <CopilotKit runtimeUrl="/api/copilotkit">
-        <div className="min-h-screen bg-white">
-          <StudentNavbar />
-          <main className="mx-auto max-w-6xl px-4 py-4 pb-20 md:p-6 md:pb-6">
-            {children}
-          </main>
-          <MobileTabBar tabs={studentTabs} />
-        </div>
-      </CopilotKit>
+      <div className="min-h-screen bg-white">
+        <StudentNavbar />
+        <main className="mx-auto max-w-6xl px-4 py-4 pb-20 md:p-6 md:pb-6">
+          {children}
+        </main>
+        <MobileTabBar tabs={studentTabs} />
+      </div>
     </QueryClientProvider>
   );
 }
