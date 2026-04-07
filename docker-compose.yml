@@ -63,7 +63,7 @@ services:
       - eduagent-net
 
   milvus:
-    image: milvusdb/milvus:v2.5-latest
+    image: milvusdb/milvus:v2.5.4
     command: ["milvus", "run", "standalone"]
     restart: unless-stopped
     environment:
