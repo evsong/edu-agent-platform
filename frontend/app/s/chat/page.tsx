@@ -22,7 +22,7 @@ export default function ChatPage() {
       </div>
 
       <div className="flex-1 rounded-xl border border-ink-border bg-white overflow-hidden">
-        <ChatInterface courseId="math-101" />
+        <ChatInterface courseId="00000000-0000-4000-b000-000000000001" />
       </div>
     </motion.div>
   );
