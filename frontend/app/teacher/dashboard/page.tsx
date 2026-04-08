@@ -165,7 +165,16 @@ export default function DashboardPage() {
     enabled: !!firstCourseId,
   });
 
-  const stats = overview ?? mockOverview;
+  const stats = overview ?? {
+    active_students: 0,
+    active_students_trend: [],
+    qa_accuracy: 0,
+    qa_accuracy_delta: 0,
+    warning_count: 0,
+    warning_avatars: [],
+    ai_interactions: 0,
+    ai_breakdown: "",
+  };
   const masteryData = mastery ?? [];
   const warningData = warnings ?? [];
 
