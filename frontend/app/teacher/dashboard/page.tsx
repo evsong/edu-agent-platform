@@ -154,9 +154,15 @@ export default function DashboardPage() {
   });
 
   const { data: mastery } = useQuery({
-    queryKey: ["knowledge-mastery", firstCourseId],
-    queryFn: () => fetchKnowledgeMastery(firstCourseId),
-    enabled: !!firstCourseId,
+    queryKey: ["knowledge-mastery-all", courses?.map((c) => c.id)],
+    queryFn: async () => {
+      if (!courses?.length) return [];
+      const all = await Promise.all(
+        courses.map((c) => fetchKnowledgeMastery(c.id).catch(() => [])),
+      );
+      return all.flat().sort((a, b) => b.mastery - a.mastery);
+    },
+    enabled: !!courses?.length,
   });
 
   const { data: warnings } = useQuery({
