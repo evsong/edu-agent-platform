@@ -11,7 +11,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.assignment import Assignment, Submission
-from app.services.grading_prompts import build_grading_prompt
+from app.services.grading_prompts import build_grading_prompt, _detect_content_type
 from app.services.llm import LLMClient
 
 logger = logging.getLogger(__name__)
@@ -31,26 +31,87 @@ class GradingService:
 
     # ── Stage 1: Preprocessing ──────────────────────────────────────
 
-    @staticmethod
-    def preprocess_document(content: str) -> list[dict]:
-        """Split *content* by newlines, skip blanks, and assign paragraph IDs.
+    # Patterns that start a new logical code block
+    _CODE_BLOCK_STARTERS = ("def ", "class ", "async def ", "function ", "#include")
 
-        Returns a list of ``{"id": "P1", "text": "...", "char_offset": <int>}``.
-        ``char_offset`` is the starting character index of the paragraph in the
-        original content string (useful for downstream document-level mapping).
+    @staticmethod
+    def preprocess_document(content: str) -> tuple[list[dict], str]:
+        """Split *content* into numbered paragraphs and detect content type.
+
+        For **code** content the split happens at logical block boundaries
+        (functions, classes) rather than every newline, keeping related lines
+        together so the LLM can reason about whole functions.
+
+        Returns
+        -------
+        tuple[list[dict], str]
+            A 2-tuple of:
+            - paragraphs: list of ``{"id": "P1", "text": "...", "char_offset": <int>}``
+            - content_type: one of ``"text"``, ``"code"``, ``"mixed"``
         """
+        content_type = _detect_content_type(content)
+
+        if content_type == "code":
+            return GradingService._split_code_blocks(content), content_type
+
+        # For text and mixed: original line-by-line splitting
         paragraphs: list[dict] = []
         idx = 1
         offset = 0
         for line in content.split("\n"):
-            # Track the offset including the newline separator
             if line.strip():
                 paragraphs.append(
                     {"id": f"P{idx}", "text": line.strip(), "char_offset": offset}
                 )
                 idx += 1
             offset += len(line) + 1  # +1 for the newline character
-        return paragraphs
+        return paragraphs, content_type
+
+    @staticmethod
+    def _split_code_blocks(content: str) -> list[dict]:
+        """Split code content by logical blocks (functions/classes).
+
+        Lines before the first block starter are grouped together, and each
+        function/class definition starts a new paragraph.
+        """
+        lines = content.split("\n")
+        blocks: list[dict] = []
+        current_lines: list[str] = []
+        current_offset = 0
+        block_start_offset = 0
+        idx = 1
+
+        for line in lines:
+            stripped = line.strip()
+            # Check if this line starts a new logical block
+            is_block_start = any(
+                stripped.startswith(s)
+                for s in GradingService._CODE_BLOCK_STARTERS
+            )
+
+            if is_block_start and current_lines:
+                # Flush the accumulated lines as a paragraph
+                text = "\n".join(current_lines)
+                if text.strip():
+                    blocks.append(
+                        {"id": f"P{idx}", "text": text.strip(), "char_offset": block_start_offset}
+                    )
+                    idx += 1
+                current_lines = []
+                block_start_offset = current_offset
+
+            current_lines.append(line)
+            current_offset += len(line) + 1
+
+        # Flush the last block
+        if current_lines:
+            text = "\n".join(current_lines)
+            if text.strip():
+                blocks.append(
+                    {"id": f"P{idx}", "text": text.strip(), "char_offset": block_start_offset}
+                )
+
+        return blocks
 
     # ── Stage 2: LLM Grading ───────────────────────────────────────
 
@@ -83,7 +144,7 @@ class GradingService:
             Complete grading result with annotations, score, and summary.
         """
         # Stage 1 — preprocess
-        paragraphs = self.preprocess_document(content)
+        paragraphs, content_type = self.preprocess_document(content)
         if not paragraphs:
             return {
                 "annotations": [],
@@ -98,7 +159,7 @@ class GradingService:
             rules = await self.get_grading_rules(course_id, db)
 
         # Stage 2 — LLM call
-        messages = build_grading_prompt(paragraphs, rules)
+        messages = build_grading_prompt(paragraphs, rules, content_type=content_type)
         raw_response = await self.llm.chat(messages, json_mode=True)
 
         try:

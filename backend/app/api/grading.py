@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import base64
+import json
+import logging
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +17,8 @@ from app.models.assignment import Assignment, Submission
 from app.models.user import User
 from app.services.grading import GradingService
 from app.services.llm import LLMClient
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/grading", tags=["grading"])
 
@@ -161,6 +166,123 @@ async def get_grading_rules(
     svc = _get_service()
     rules = await svc.get_grading_rules(course_id, db)
     return {"course_id": course_id, "rules": rules}
+
+
+# ── Multimodal endpoint ────────────────────────────────────────────
+
+
+_IMAGE_GRADING_PROMPT = (
+    "分析这张图片中的学生作业，找出错误并给出批注。\n\n"
+    "请按以下JSON格式输出：\n"
+    '{"annotations": [{"location": "描述位置", "type": "error|warning|suggestion|praise", '
+    '"severity": "critical|major|minor", "comment": "批注内容", '
+    '"correction": "修正建议或null"}], '
+    '"overall_score": 0-100, '
+    '"summary": "总体评价", '
+    '"strengths": ["优点"], '
+    '"improvements": ["改进建议"]}'
+)
+
+
+@router.post("/submit-multimodal")
+async def submit_multimodal(
+    submission_id: str = Form(...),
+    image: UploadFile | None = File(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Grade a submission that may include an image (e.g. handwritten work).
+
+    If *image* is provided the LLM is called with vision capability to
+    analyse the image.  Otherwise, falls back to the standard text pipeline.
+    """
+    svc = _get_service()
+
+    # Validate UUID
+    try:
+        sub_uuid = uuid.UUID(submission_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid submission_id format",
+        )
+
+    # Load submission
+    result = await db.execute(
+        select(Submission).where(Submission.id == sub_uuid)
+    )
+    submission = result.scalar_one_or_none()
+    if submission is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Submission not found",
+        )
+
+    # ── Image path: use LLM vision ──
+    if image is not None:
+        image_bytes = await image.read()
+        if not image_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Uploaded image is empty",
+            )
+
+        image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+
+        messages = [
+            {"role": "system", "content": "你是一位资深教师，擅长批改学生手写作业和图片格式的作业。输出严格JSON格式。"},
+            {"role": "user", "content": _IMAGE_GRADING_PROMPT},
+        ]
+
+        try:
+            raw_response = await svc.llm.chat_with_image(messages, image_b64)
+            grading_result = json.loads(raw_response)
+        except json.JSONDecodeError:
+            logger.error("LLM returned invalid JSON for image submission %s", submission_id)
+            grading_result = {
+                "annotations": [],
+                "overall_score": 0,
+                "summary": "图片批改失败：无法解析LLM返回结果。",
+                "strengths": [],
+                "improvements": [],
+            }
+        except RuntimeError as e:
+            logger.error("LLM vision call failed for submission %s: %s", submission_id, e)
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"LLM视觉服务调用失败: {e}",
+            )
+
+        # Persist result
+        await svc._save_result(submission_id, grading_result, db)
+
+        return {
+            "task_id": submission_id,
+            "status": "completed",
+            "mode": "image",
+            "result": grading_result,
+        }
+
+    # ── Text-only fallback (same as /submit) ──
+    if not submission.content:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Submission has no content and no image was provided",
+        )
+
+    course_id = str(submission.assignment.course_id)
+    grading_result = await svc.grade_submission(
+        submission_id=submission_id,
+        content=submission.content,
+        course_id=course_id,
+        db=db,
+    )
+
+    return {
+        "task_id": submission_id,
+        "status": "completed",
+        "mode": "text",
+        "result": grading_result,
+    }
 
 
 # ── Helpers ─────────────────────────────────────────────────────────

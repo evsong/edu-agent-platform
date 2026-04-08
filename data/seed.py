@@ -69,6 +69,7 @@ PHYSICS_COURSE_ID = uuid.UUID("00000000-0000-4000-b000-000000000002")
 ASSIGNMENT_1_ID = uuid.UUID("00000000-0000-4000-c000-000000000001")  # existing: 定积分
 ASSIGNMENT_2_ID = uuid.UUID("00000000-0000-4000-c000-000000000002")  # new: 级数
 ASSIGNMENT_3_ID = uuid.UUID("00000000-0000-4000-c000-000000000003")  # new: 牛顿力学
+ASSIGNMENT_4_ID = uuid.UUID("00000000-0000-4000-c000-000000000004")  # new: 数据结构(代码)
 
 STUDENT_NAMES = ["张三", "李四", "王五", "赵六", "陈七"]
 STUDENT_EMAILS = [f"student{i}@demo.com" for i in range(1, 6)]
@@ -622,6 +623,92 @@ async def seed_additional_assignments(session: AsyncSession) -> None:
     print("  [+] Created 2 additional assignments (级数 + 牛顿力学) with 3 submissions")
 
 
+async def seed_code_assignment(session: AsyncSession) -> None:
+    """Create a code-based assignment (数据结构) with a buggy Python submission."""
+    now = datetime.now(timezone.utc)
+
+    assignment = Assignment(
+        id=ASSIGNMENT_4_ID,
+        course_id=MATH_COURSE_ID,
+        title="编程作业-数据结构：链表操作",
+        content=(
+            "实现以下链表操作函数（Python）：\n"
+            "1. 反转单链表 reverse_list(head)\n"
+            "2. 检测链表是否有环 has_cycle(head)\n"
+            "3. 合并两个有序链表 merge_sorted(l1, l2)\n\n"
+            "要求：\n"
+            "- 提供完整的 ListNode 类定义\n"
+            "- 每个函数需有类型注解和文档字符串\n"
+            "- 考虑边界情况（空链表、单节点等）"
+        ),
+        due_date=now + timedelta(days=5),
+        grading_rules={
+            "total_points": 100,
+            "questions": [
+                {"id": 1, "points": 30, "type": "code", "criteria": "链表反转"},
+                {"id": 2, "points": 30, "type": "code", "criteria": "环检测"},
+                {"id": 3, "points": 40, "type": "code", "criteria": "有序合并"},
+            ],
+        },
+    )
+    session.add(assignment)
+    await session.flush()
+
+    # Buggy submission from 李四: has a deliberate off-by-one in merge
+    # and missing cycle detection logic
+    code_submission = Submission(
+        assignment_id=ASSIGNMENT_4_ID,
+        student_id=STUDENT_IDS[1],  # 李四
+        content=(
+            "class ListNode:\n"
+            "    def __init__(self, val=0, next=None):\n"
+            "        self.val = val\n"
+            "        self.next = next\n"
+            "\n"
+            "def reverse_list(head):\n"
+            "    prev = None\n"
+            "    curr = head\n"
+            "    while curr:\n"
+            "        next_node = curr.next\n"
+            "        curr.next = prev\n"
+            "        prev = curr\n"
+            "        curr = next_node\n"
+            "    return prev\n"
+            "\n"
+            "def has_cycle(head):\n"
+            "    # 使用快慢指针\n"
+            "    slow = head\n"
+            "    fast = head\n"
+            "    while fast and fast.next:\n"
+            "        slow = slow.next\n"
+            "        fast = fast.next\n"  # BUG: should be fast.next.next
+            "        if slow == fast:\n"
+            "            return True\n"
+            "    return False\n"
+            "\n"
+            "def merge_sorted(l1, l2):\n"
+            "    dummy = ListNode()\n"
+            "    curr = dummy\n"
+            "    while l1 and l2:\n"
+            "        if l1.val <= l2.val:\n"
+            "            curr.next = l1\n"
+            "            l1 = l1.next\n"
+            "        else:\n"
+            "            curr.next = l2\n"
+            "            l2 = l2.next\n"
+            "        curr = curr.next\n"
+            "    # 忘记处理剩余节点\n"
+            "    return dummy.next\n"
+        ),
+        status="submitted",
+        score=None,
+        annotations=None,
+    )
+    session.add(code_submission)
+    await session.flush()
+    print("  [+] Created code assignment (数据结构) with 1 buggy submission")
+
+
 async def seed_xapi_statements(session: AsyncSession) -> None:
     """Create ~70 xAPI statements simulating realistic learning activities."""
     random.seed(42)  # reproducible but varied
@@ -932,7 +1019,7 @@ async def main() -> None:
     # Create tables if they don't exist
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    print("[1/11] Tables ensured")
+    print("[1/12] Tables ensured")
 
     async with async_session() as session:
         async with session.begin():
@@ -943,34 +1030,37 @@ async def main() -> None:
                 print("    Run: DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
                 return
 
-            print("[2/11] Seeding users...")
+            print("[2/12] Seeding users...")
             await seed_users(session)
 
-            print("[3/11] Seeding courses...")
+            print("[3/12] Seeding courses...")
             await seed_courses(session)
 
-            print("[4/11] Seeding enrollments...")
+            print("[4/12] Seeding enrollments...")
             await seed_enrollments(session)
 
-            print("[5/11] Seeding knowledge points...")
+            print("[5/12] Seeding knowledge points...")
             await seed_knowledge_points(session)
 
-            print("[6/11] Seeding exercises...")
+            print("[6/12] Seeding exercises...")
             await seed_exercises(session)
 
-            print("[7/11] Seeding assignments & submissions...")
+            print("[7/12] Seeding assignments & submissions...")
             await seed_assignments(session)
 
-            print("[8/11] Seeding additional assignments...")
+            print("[8/12] Seeding additional assignments...")
             await seed_additional_assignments(session)
 
-            print("[9/11] Seeding student profiles (BKT)...")
+            print("[9/12] Seeding code assignment...")
+            await seed_code_assignment(session)
+
+            print("[10/12] Seeding student profiles (BKT)...")
             await seed_student_profiles(session)
 
-            print("[10/11] Seeding agent configs...")
+            print("[11/12] Seeding agent configs...")
             await seed_agent_configs(session)
 
-            print("[11/11] Seeding xAPI statements...")
+            print("[12/12] Seeding xAPI statements...")
             await seed_xapi_statements(session)
 
         # Commit happens automatically when the `begin()` block exits

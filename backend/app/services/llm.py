@@ -77,6 +77,51 @@ class LLMClient:
             logger.error("LLM API error %d: %s", e.status_code, e.message)
             raise RuntimeError(f"LLM 服务错误 ({e.status_code}): {e.message}") from e
 
+    # ── Chat with image (vision) ──────────────────────────────────
+
+    async def chat_with_image(
+        self,
+        messages: list[dict],
+        image_b64: str,
+        *,
+        model: str | None = None,
+    ) -> str:
+        """Chat completion with an image input (vision capability).
+
+        The last user message is transformed into a multi-part content array
+        containing both text and an inline base64 image.
+        """
+        msgs = [m.copy() for m in messages]
+        if msgs and msgs[-1]["role"] == "user":
+            msgs[-1] = {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": msgs[-1]["content"]},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/png;base64,{image_b64}",
+                        },
+                    },
+                ],
+            }
+
+        try:
+            resp = await self._client.chat.completions.create(
+                model=model or self.default_model,
+                messages=msgs,
+            )
+            return resp.choices[0].message.content or ""
+        except openai.APIConnectionError as e:
+            logger.error("LLM vision connection failed: %s", e)
+            raise RuntimeError(f"无法连接到 LLM 服务: {e}") from e
+        except openai.APITimeoutError as e:
+            logger.error("LLM vision request timed out: %s", e)
+            raise RuntimeError("LLM 视觉请求超时，请稍后重试") from e
+        except openai.APIStatusError as e:
+            logger.error("LLM vision API error %d: %s", e.status_code, e.message)
+            raise RuntimeError(f"LLM 服务错误 ({e.status_code}): {e.message}") from e
+
     # ── Streaming ────────────────────────────────────────────────
 
     async def stream(
