@@ -141,27 +141,23 @@ async def director_node(state: DirectorState, config: dict) -> dict:
 
     # ── Parse response ───────────────────────────────────────────────
     cleaned = raw_response.strip().strip('"').strip("'").lower()
+    completed_ids = {r["agent_id"] for r in agent_responses}
 
-    # Check for explicit END
-    if cleaned == "end":
-        logger.info("Director: LLM returned END — stopping")
-        return {"should_end": True, "current_agent_id": None}
-
-    # Try to match a registered agent_id
+    # Try to match a registered agent_id from LLM response
     agent_id: str | None = None
 
-    # Exact match first
-    if cleaned in registered:
-        agent_id = cleaned
+    if cleaned != "end" and cleaned:
+        # Exact match first
+        if cleaned in registered:
+            agent_id = cleaned
+        # Regex fallback: find any registered ID in the response
+        if agent_id is None:
+            for aid in registered:
+                if re.search(rf"\b{re.escape(aid)}\b", cleaned):
+                    agent_id = aid
+                    break
 
-    # Regex fallback: find any registered ID in the response
-    if agent_id is None:
-        for aid in registered:
-            if re.search(rf"\b{re.escape(aid)}\b", cleaned):
-                agent_id = aid
-                break
-
-    # Keyword-based fallback when LLM returns empty or unparseable
+    # Keyword-based fallback — skip already-completed agents
     if agent_id is None:
         msg_lower = latest_message.lower()
         keyword_map = [
@@ -171,14 +167,19 @@ async def director_node(state: DirectorState, config: dict) -> dict:
             (["配置", "设置", "管理", "agent"], "meta"),
         ]
         for keywords, aid in keyword_map:
-            if aid in registered and any(k in msg_lower for k in keywords):
+            if aid in registered and aid not in completed_ids and any(k in msg_lower for k in keywords):
                 agent_id = aid
-                logger.info("Director: keyword fallback matched '%s'", aid)
+                logger.info("Director: keyword fallback matched '%s' (skipping completed: %s)", aid, completed_ids)
                 break
 
-    # If continuation turn and can't parse → assume done
+    # If continuation turn and no uncompleted agent found → done
     if agent_id is None and agent_responses:
-        logger.info("Director: continuation parse failed — assuming done")
+        logger.info("Director: no uncompleted agent found — ending (completed: %s)", completed_ids)
+        return {"should_end": True, "current_agent_id": None}
+
+    # Check for explicit END only on first turn (continuation uses keyword fallback above)
+    if agent_id is None and cleaned == "end":
+        logger.info("Director: LLM returned END — stopping")
         return {"should_end": True, "current_agent_id": None}
 
     # Ultimate fallback (first turn only): route to "qa"
