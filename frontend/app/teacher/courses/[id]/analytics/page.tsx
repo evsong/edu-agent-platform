@@ -14,9 +14,17 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
+import ReactMarkdown from "react-markdown";
 import { apiFetch } from "@/lib/api";
 import type { AnalyticsData } from "@/lib/queries";
 import { cn } from "@/lib/utils";
+
+interface CourseReport {
+  course_id: string;
+  top_errors: { knowledge_point: string; count: number }[];
+  teaching_suggestions: string;
+  total_interactions: number;
+}
 
 const mockAnalytics: AnalyticsData = {
   mastery_distribution: [
@@ -44,6 +52,11 @@ export default function CourseAnalyticsPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+
+  const { data: report, isLoading: reportLoading } = useQuery({
+    queryKey: ["course-report", id],
+    queryFn: () => apiFetch<CourseReport>(`/api/analytics/report/${id}`),
+  });
 
   const { data: analytics } = useQuery({
     queryKey: ["course-analytics", id],
@@ -142,6 +155,14 @@ export default function CourseAnalyticsPage({
           班级掌握度分布与易错知识点分析
         </p>
       </div>
+
+      {/* Stats row from report */}
+      {report && (
+        <div className="flex gap-4 text-sm text-ink-text-muted">
+          <span><i className="ri-chat-3-line mr-1" />总交互: {report.total_interactions} 次</span>
+          <span><i className="ri-error-warning-line mr-1" />共性错误: {report.top_errors?.length || 0} 个知识点</span>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Mastery Distribution */}
@@ -250,6 +271,26 @@ export default function CourseAnalyticsPage({
             ))}
           </div>
         </div>
+      </div>
+
+      {/* Teaching Suggestions from LLM */}
+      <div className="rounded-xl border border-ink-border bg-white p-5 lg:col-span-2">
+        <h2 className="text-base font-heading font-semibold text-ink-text mb-1">
+          <i className="ri-lightbulb-line mr-1.5 text-ink-warning" />
+          AI 教学建议
+        </h2>
+        <p className="text-xs text-ink-text-muted mb-4">
+          基于班级学情数据，AI 生成的教学优化建议
+        </p>
+        {report?.teaching_suggestions ? (
+          <div className="prose prose-sm max-w-none text-ink-text">
+            <ReactMarkdown>{report.teaching_suggestions}</ReactMarkdown>
+          </div>
+        ) : (
+          <p className="text-sm text-ink-text-muted">
+            {reportLoading ? "加载教学建议中..." : "暂无教学建议"}
+          </p>
+        )}
       </div>
     </motion.div>
   );
