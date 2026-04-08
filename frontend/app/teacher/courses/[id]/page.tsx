@@ -1,8 +1,8 @@
 "use client";
 
-import { use } from "react";
+import { use, useState, useEffect } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { apiFetch } from "@/lib/api";
@@ -38,12 +38,36 @@ export default function CourseDetailPage({
     queryFn: () => fetchCourse(id),
   });
 
+  const queryClient = useQueryClient();
+
   const { data: studentsData } = useQuery({
     queryKey: ["course-students", id],
     queryFn: () =>
       apiFetch<{ students: typeof mockStudents }>(`/api/courses/${id}/students`),
   });
   const students = studentsData?.students ?? [];
+
+  const [editName, setEditName] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+
+  useEffect(() => {
+    if (course) {
+      setEditName(course.name);
+      setEditDesc(course.description || "");
+    }
+  }, [course]);
+
+  const updateMutation = useMutation({
+    mutationFn: (data: { name?: string; description?: string }) =>
+      apiFetch(`/api/courses/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["course", id] });
+      queryClient.invalidateQueries({ queryKey: ["courses"] });
+    },
+  });
 
   if (!course) {
     return (
@@ -219,7 +243,8 @@ export default function CourseDetailPage({
                   </label>
                   <input
                     type="text"
-                    defaultValue={c.name}
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
                     className="mt-1 w-full rounded-lg border border-ink-border bg-white px-3 py-2 text-sm text-ink-text outline-none focus:border-ink-primary focus:ring-2 focus:ring-ink-primary/20"
                   />
                 </div>
@@ -228,14 +253,24 @@ export default function CourseDetailPage({
                     描述
                   </label>
                   <textarea
-                    defaultValue={c.description}
+                    value={editDesc}
+                    onChange={(e) => setEditDesc(e.target.value)}
                     rows={3}
                     className="mt-1 w-full rounded-lg border border-ink-border bg-white px-3 py-2 text-sm text-ink-text outline-none focus:border-ink-primary focus:ring-2 focus:ring-ink-primary/20 resize-none"
                   />
                 </div>
               </div>
-              <button className="inline-flex h-9 items-center gap-2 rounded-lg bg-ink-primary px-4 text-sm font-medium text-white transition-colors hover:bg-ink-primary-dark">
-                保存修改
+              <button
+                onClick={() =>
+                  updateMutation.mutate({
+                    name: editName,
+                    description: editDesc,
+                  })
+                }
+                disabled={updateMutation.isPending}
+                className="inline-flex h-9 items-center gap-2 rounded-lg bg-ink-primary px-4 text-sm font-medium text-white transition-colors hover:bg-ink-primary-dark disabled:opacity-50"
+              >
+                {updateMutation.isPending ? "保存中..." : "保存修改"}
               </button>
             </div>
           </div>

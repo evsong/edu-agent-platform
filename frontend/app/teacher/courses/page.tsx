@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
+import { apiFetch } from "@/lib/api";
 import { fetchCourses } from "@/lib/queries";
 import type { Course } from "@/lib/queries";
 
@@ -66,12 +68,28 @@ function formatDate(iso: string): string {
 }
 
 export default function CoursesPage() {
+  const queryClient = useQueryClient();
   const { data: courses } = useQuery({
     queryKey: ["courses"],
     queryFn: fetchCourses,
   });
 
   const list = courses ?? [];
+
+  const [showCreate, setShowCreate] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newDesc, setNewDesc] = useState("");
+
+  const createMutation = useMutation({
+    mutationFn: (data: { name: string; description: string }) =>
+      apiFetch("/api/courses", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["courses"] });
+      setShowCreate(false);
+      setNewName("");
+      setNewDesc("");
+    },
+  });
 
   return (
     <motion.div initial="hidden" animate="visible" variants={stagger} className="space-y-6">
@@ -84,11 +102,53 @@ export default function CoursesPage() {
             管理你的所有课程与学习资源
           </p>
         </div>
-        <button className="inline-flex h-9 items-center gap-2 rounded-lg bg-ink-primary px-4 text-sm font-medium text-white transition-colors hover:bg-ink-primary-dark self-start sm:self-auto">
-          <i className="ri-add-line" />
-          新建课程
+        <button
+          onClick={() => setShowCreate((v) => !v)}
+          className="inline-flex h-9 items-center gap-2 rounded-lg bg-ink-primary px-4 text-sm font-medium text-white transition-colors hover:bg-ink-primary-dark self-start sm:self-auto"
+        >
+          <i className={showCreate ? "ri-close-line" : "ri-add-line"} />
+          {showCreate ? "取消" : "新建课程"}
         </button>
       </div>
+
+      {showCreate && (
+        <div className="rounded-xl border border-ink-primary/20 bg-ink-primary-lighter/30 p-5">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label className="text-xs font-medium text-ink-text-light">
+                课程名称
+              </label>
+              <input
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="高等数学"
+                className="mt-1 w-full rounded-lg border border-ink-border px-3 py-1.5 text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-ink-text-light">
+                课程描述
+              </label>
+              <input
+                value={newDesc}
+                onChange={(e) => setNewDesc(e.target.value)}
+                placeholder="微积分、线性代数..."
+                className="mt-1 w-full rounded-lg border border-ink-border px-3 py-1.5 text-sm"
+              />
+            </div>
+          </div>
+          <button
+            onClick={() =>
+              newName &&
+              createMutation.mutate({ name: newName, description: newDesc })
+            }
+            disabled={!newName || createMutation.isPending}
+            className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-lg bg-ink-primary px-4 text-xs font-medium text-white hover:bg-ink-primary-dark disabled:opacity-50"
+          >
+            {createMutation.isPending ? "创建中..." : "创建课程"}
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {list.map((course) => (

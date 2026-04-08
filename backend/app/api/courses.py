@@ -1,14 +1,15 @@
-"""Courses API — list courses, course detail, enrolled students."""
+"""Courses API — list courses, course detail, enrolled students, create & update."""
 
 from __future__ import annotations
 
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import get_current_user_optional
+from app.auth import get_current_user, get_current_user_optional
 from app.database import get_db
 from app.models.course import Course, CourseEnrollment
 from app.models.knowledge_point import KnowledgePoint
@@ -16,6 +17,17 @@ from app.models.student_profile import StudentProfile
 from app.models.user import User
 
 router = APIRouter(prefix="/api/courses", tags=["courses"])
+
+# ── Request schemas ──────────────────────────────────────────────
+
+class CourseCreatePayload(BaseModel):
+    name: str
+    description: str = ""
+
+
+class CourseUpdatePayload(BaseModel):
+    name: str | None = None
+    description: str | None = None
 
 
 def _course_icon(name: str) -> str:
@@ -92,6 +104,73 @@ async def list_courses(
         }
         for c in courses
     ]
+
+
+@router.post("")
+async def create_course(
+    payload: CourseCreatePayload,
+    db: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(get_current_user_optional),
+):
+    """Create a new course owned by the authenticated teacher.
+
+    Falls back to the first teacher in the database for demo/anonymous usage.
+    """
+    teacher_id: uuid.UUID | None = None
+    if current_user and current_user.role == "teacher":
+        teacher_id = current_user.id
+    else:
+        # Fallback: pick the first teacher for demo purposes
+        result = await db.execute(
+            select(User).where(User.role == "teacher").limit(1)
+        )
+        teacher = result.scalar_one_or_none()
+        if teacher is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No teacher user available. Please log in as a teacher.",
+            )
+        teacher_id = teacher.id
+
+    course = Course(
+        name=payload.name,
+        description=payload.description,
+        teacher_id=teacher_id,
+    )
+    db.add(course)
+    await db.flush()
+    await db.refresh(course)
+    return {
+        "id": str(course.id),
+        "name": course.name,
+        "description": course.description,
+    }
+
+
+@router.put("/{course_id}")
+async def update_course(
+    course_id: uuid.UUID,
+    payload: CourseUpdatePayload,
+    db: AsyncSession = Depends(get_db),
+):
+    """Update an existing course's name and/or description."""
+    result = await db.execute(select(Course).where(Course.id == course_id))
+    course = result.scalar_one_or_none()
+    if course is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Course not found",
+        )
+    if payload.name is not None:
+        course.name = payload.name
+    if payload.description is not None:
+        course.description = payload.description
+    await db.flush()
+    return {
+        "id": str(course.id),
+        "name": course.name,
+        "description": course.description,
+    }
 
 
 @router.get("/{course_id}")
