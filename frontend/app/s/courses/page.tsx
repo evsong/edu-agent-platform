@@ -81,10 +81,9 @@ export default function StudentCoursesPage() {
       return enriched;
     },
     enabled: !!user?.id,
-    placeholderData: mockCourses,
   });
 
-  const list = courses ?? mockCourses;
+  const list = courses ?? [];
 
   return (
     <motion.div

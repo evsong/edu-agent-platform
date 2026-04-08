@@ -108,7 +108,6 @@ export default function AgentsPage() {
   const { data: agents } = useQuery({
     queryKey: ["agents"],
     queryFn: fetchAgents,
-    placeholderData: mockAgents,
   });
 
   const { data: courses } = useQuery({
@@ -147,7 +146,7 @@ export default function AgentsPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["agents"] }),
   });
 
-  const list = agents ?? mockAgents;
+  const list = agents ?? [];
 
   const startEdit = (agent: AgentConfig) => {
     setEditingId(agent.id);

@@ -79,7 +79,6 @@ export default function CourseAnalyticsPage({
         top_errors,
       };
     },
-    placeholderData: mockAnalytics,
   });
 
   const data = analytics ?? mockAnalytics;

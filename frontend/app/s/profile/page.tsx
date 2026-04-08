@@ -119,7 +119,6 @@ export default function ProfilePage() {
       return transformProfile(raw);
     },
     enabled: !!user?.id,
-    placeholderData: mockProfile,
   });
 
   const data = profile ?? mockProfile;

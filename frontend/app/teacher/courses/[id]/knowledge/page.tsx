@@ -87,13 +87,11 @@ export default function KnowledgeBasePage({
   const { data: docs } = useQuery({
     queryKey: ["knowledge-docs", id],
     queryFn: () => fetchKnowledgeDocs(id),
-    placeholderData: mockDocs,
   });
 
   const { data: graphData } = useQuery({
     queryKey: ["knowledge-graph", id],
     queryFn: () => fetchKnowledgeGraph(id),
-    placeholderData: mockGraph,
   });
 
   const handleRebuild = useCallback(async () => {
@@ -107,8 +105,8 @@ export default function KnowledgeBasePage({
     }
   }, [id]);
 
-  const docList = docs ?? mockDocs;
-  const graph = graphData ?? mockGraph;
+  const docList = docs ?? [];
+  const graph = graphData ?? { nodes: [], links: [] };
 
   return (
     <motion.div

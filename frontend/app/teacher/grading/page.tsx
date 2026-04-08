@@ -130,7 +130,6 @@ export default function GradingQueuePage() {
   const { data: submissions } = useQuery({
     queryKey: ["submissions"],
     queryFn: () => fetchSubmissions(),
-    placeholderData: mockSubmissions,
   });
 
   const gradeMutation = useMutation({
@@ -140,7 +139,7 @@ export default function GradingQueuePage() {
     },
   });
 
-  const list = submissions ?? mockSubmissions;
+  const list = submissions ?? [];
   const pendingCount = list.filter((s) => s.status === "pending").length;
 
   return (

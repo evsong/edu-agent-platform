@@ -173,10 +173,9 @@ export default function AssignmentsPage() {
         score: s.score,
       }));
     },
-    placeholderData: mockAssignments,
   });
 
-  const list = assignments ?? mockAssignments;
+  const list = assignments ?? [];
   const pendingCount = list.filter(
     (a) => a.status === "pending" || a.status === "overdue",
   ).length;

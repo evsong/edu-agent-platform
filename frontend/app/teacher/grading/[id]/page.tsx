@@ -115,7 +115,6 @@ export default function GradingDetailPage({
   const { data: parsedAnnotations } = useQuery({
     queryKey: ["grading-detail", id],
     queryFn: () => fetchGradingDetail(id),
-    placeholderData: mockDetail,
   });
 
   // Build the detail object from real submission data, with mock as fallback

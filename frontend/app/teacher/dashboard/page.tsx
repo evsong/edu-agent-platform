@@ -151,26 +151,23 @@ export default function DashboardPage() {
   const { data: overview } = useQuery({
     queryKey: ["stat-overview"],
     queryFn: () => fetchStatOverview(),
-    placeholderData: mockOverview,
   });
 
   const { data: mastery } = useQuery({
     queryKey: ["knowledge-mastery", firstCourseId],
     queryFn: () => fetchKnowledgeMastery(firstCourseId),
     enabled: !!firstCourseId,
-    placeholderData: mockMastery,
   });
 
   const { data: warnings } = useQuery({
     queryKey: ["warnings", firstCourseId],
     queryFn: () => fetchWarnings(firstCourseId),
     enabled: !!firstCourseId,
-    placeholderData: mockWarnings,
   });
 
   const stats = overview ?? mockOverview;
-  const masteryData = mastery ?? mockMastery;
-  const warningData = warnings ?? mockWarnings;
+  const masteryData = mastery ?? [];
+  const warningData = warnings ?? [];
 
   return (
     <motion.div

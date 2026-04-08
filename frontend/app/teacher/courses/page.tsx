@@ -69,10 +69,9 @@ export default function CoursesPage() {
   const { data: courses } = useQuery({
     queryKey: ["courses"],
     queryFn: fetchCourses,
-    placeholderData: mockCourses,
   });
 
-  const list = courses ?? mockCourses;
+  const list = courses ?? [];
 
   return (
     <motion.div initial="hidden" animate="visible" variants={stagger} className="space-y-6">

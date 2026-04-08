@@ -36,16 +36,14 @@ export default function CourseDetailPage({
   const { data: course } = useQuery({
     queryKey: ["course", id],
     queryFn: () => fetchCourse(id),
-    placeholderData: mockCourse,
   });
 
   const { data: studentsData } = useQuery({
     queryKey: ["course-students", id],
     queryFn: () =>
       apiFetch<{ students: typeof mockStudents }>(`/api/courses/${id}/students`),
-    placeholderData: { students: mockStudents },
   });
-  const students = studentsData?.students ?? mockStudents;
+  const students = studentsData?.students ?? [];
 
   const c = course ?? mockCourse;
 

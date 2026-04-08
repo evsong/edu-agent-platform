@@ -132,10 +132,9 @@ export default function WarningsPage() {
       );
       return allWarnings.flat();
     },
-    placeholderData: mockWarnings,
   });
 
-  const sorted = [...(warnings ?? mockWarnings)].sort(
+  const sorted = [...(warnings ?? [])].sort(
     (a, b) =>
       (riskConfig[a.risk_level]?.sortOrder ?? 3) -
       (riskConfig[b.risk_level]?.sortOrder ?? 3),

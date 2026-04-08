@@ -134,7 +134,6 @@ export default function AssignmentDetailPage({
   const { data: gradingDetail } = useQuery({
     queryKey: ["student-grading-detail", id],
     queryFn: () => fetchGradingDetail(id),
-    placeholderData: isGraded ? mockGradedDetail : undefined,
     enabled: isGraded,
   });
 
