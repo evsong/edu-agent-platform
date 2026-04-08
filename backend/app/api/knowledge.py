@@ -1,11 +1,16 @@
 """Knowledge API — document upload, RAG search, and knowledge graph endpoints."""
 
+import asyncio
+import uuid as uuid_mod
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from app.services.knowledge import KnowledgeService
 from app.services.llm import LLMClient
 
 router = APIRouter(prefix="/api/knowledge", tags=["knowledge"])
+
+# In-memory task tracker for async PDF processing
+_upload_tasks: dict[str, dict] = {}
 
 # Module-level singleton; initialised lazily on first request.
 _knowledge_service: KnowledgeService | None = None
@@ -31,67 +36,67 @@ async def upload_document(
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "txt"
 
     if ext == "pdf":
-        # PDF: convert pages to images via pdftoppm, then OCR with DeepSeek-OCR via Ollama
-        import tempfile
-        import os
-        import subprocess
-        import base64
-        import httpx
-        import logging
+        # PDF: async processing with DeepSeek-OCR — return task_id immediately
+        task_id = str(uuid_mod.uuid4())
+        _upload_tasks[task_id] = {"status": "processing", "progress": "0/?", "course_id": course_id, "filename": filename}
 
-        logger = logging.getLogger(__name__)
-        OLLAMA_URL = "http://host.docker.internal:11434"
+        async def _process_pdf_background(task_id: str, raw: bytes, cid: str, fname: str):
+            import tempfile, os, subprocess, base64, httpx, logging
+            logger = logging.getLogger(__name__)
+            OLLAMA_URL = "http://host.docker.internal:11434"
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            pdf_path = os.path.join(tmpdir, "input.pdf")
-            with open(pdf_path, "wb") as f:
-                f.write(raw_bytes)
+            try:
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    pdf_path = os.path.join(tmpdir, "input.pdf")
+                    with open(pdf_path, "wb") as f:
+                        f.write(raw)
 
-            # Convert PDF to images (max 20 pages for demo, 150 DPI for speed)
-            subprocess.run(
-                ["pdftoppm", "-png", "-r", "150", "-l", "20", pdf_path, os.path.join(tmpdir, "page")],
-                check=True, timeout=120,
-            )
+                    subprocess.run(
+                        ["pdftoppm", "-png", "-r", "150", "-l", "30", pdf_path, os.path.join(tmpdir, "page")],
+                        check=True, timeout=120,
+                    )
+                    page_images = sorted([os.path.join(tmpdir, f) for f in os.listdir(tmpdir) if f.startswith("page") and f.endswith(".png")])
+                    total = len(page_images)
+                    _upload_tasks[task_id]["progress"] = f"0/{total}"
+                    logger.info(f"PDF task {task_id}: {total} pages to OCR")
 
-            page_images = sorted(
-                [os.path.join(tmpdir, f) for f in os.listdir(tmpdir) if f.startswith("page") and f.endswith(".png")]
-            )
-            logger.info(f"PDF converted to {len(page_images)} page images")
+                    all_text = []
+                    async with httpx.AsyncClient(timeout=120.0) as client:
+                        for i, img_path in enumerate(page_images):
+                            with open(img_path, "rb") as img_f:
+                                img_b64 = base64.b64encode(img_f.read()).decode("utf-8")
+                            try:
+                                resp = await client.post(f"{OLLAMA_URL}/api/generate", json={
+                                    "model": "deepseek-ocr",
+                                    "prompt": "Convert this document page to markdown. Preserve all text, headings, formulas, and structure.",
+                                    "images": [img_b64], "stream": False,
+                                })
+                                if resp.status_code == 200:
+                                    page_text = resp.json().get("response", "")
+                                    all_text.append(f"<!-- Page {i+1} -->\n{page_text}")
+                                    logger.info(f"PDF task {task_id}: OCR page {i+1}/{total} done ({len(page_text)} chars)")
+                            except Exception as e:
+                                logger.warning(f"PDF task {task_id}: page {i+1} error: {e}")
+                            _upload_tasks[task_id]["progress"] = f"{i+1}/{total}"
 
-            # OCR each page with DeepSeek-OCR via Ollama
-            all_text = []
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                for i, img_path in enumerate(page_images):
-                    with open(img_path, "rb") as img_f:
-                        img_b64 = base64.b64encode(img_f.read()).decode("utf-8")
+                    content = "\n\n".join(all_text)
+                    if content.strip():
+                        svc = _get_service()
+                        result = await svc.upload_document(cid, fname, content)
+                        _upload_tasks[task_id].update({"status": "completed", **result})
+                    else:
+                        _upload_tasks[task_id].update({"status": "completed", "chunk_count": 0, "message": "OCR 未提取到文字"})
+            except Exception as e:
+                logger.error(f"PDF task {task_id} failed: {e}")
+                _upload_tasks[task_id].update({"status": "error", "message": str(e)})
 
-                    try:
-                        resp = await client.post(
-                            f"{OLLAMA_URL}/api/generate",
-                            json={
-                                "model": "deepseek-ocr",
-                                "prompt": "Convert this document page to markdown text. Preserve all text content, headings, and structure.",
-                                "images": [img_b64],
-                                "stream": False,
-                            },
-                        )
-                        if resp.status_code == 200:
-                            page_text = resp.json().get("response", "")
-                            all_text.append(f"<!-- Page {i+1} -->\n{page_text}")
-                            logger.info(f"OCR page {i+1}/{len(page_images)}: {len(page_text)} chars")
-                        else:
-                            logger.warning(f"OCR page {i+1} failed: {resp.status_code}")
-                    except Exception as e:
-                        logger.warning(f"OCR page {i+1} error: {e}")
-
-            content = "\n\n".join(all_text)
+        asyncio.create_task(_process_pdf_background(task_id, raw_bytes, course_id, filename))
+        return {"task_id": task_id, "status": "processing", "message": f"PDF 正在后台处理（DeepSeek-OCR），请通过 /api/knowledge/upload-status/{task_id} 查询进度"}
 
     elif ext in ("docx", "doc", "pptx", "ppt"):
-        # Word/PPT: try unstructured, fallback to raw text extraction
-        import tempfile
-        import os
         try:
             from unstructured.partition.auto import partition
+            import tempfile, os
             with tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}") as tmp:
                 tmp.write(raw_bytes)
                 tmp_path = tmp.name
@@ -103,7 +108,6 @@ async def upload_document(
         except Exception:
             content = raw_bytes.decode("utf-8", errors="ignore")
     else:
-        # Plain text (txt, md, etc.)
         content = raw_bytes.decode("utf-8")
 
     if not content.strip():
@@ -112,6 +116,15 @@ async def upload_document(
     svc = _get_service()
     result = await svc.upload_document(course_id, filename, content)
     return result
+
+
+@router.get("/upload-status/{task_id}")
+async def get_upload_status(task_id: str):
+    """Check the status of an async PDF upload task."""
+    task = _upload_tasks.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return {"task_id": task_id, **task}
 
 
 # ── RAG Search ───────────────────────────────────────────────────
