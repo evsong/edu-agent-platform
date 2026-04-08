@@ -1,10 +1,9 @@
 "use client";
 
-import { use, useCallback, useState } from "react";
+import { use, useCallback, useRef, useState } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Button } from "@/components/ui/button";
 import KnowledgeGraph from "@/components/teacher/KnowledgeGraph";
 import {
   fetchKnowledgeDocs,
@@ -14,55 +13,12 @@ import {
 import type { KnowledgeDocument, KnowledgeGraphData } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
-const mockDocs: KnowledgeDocument[] = [
-  {
-    id: "1",
-    filename: "高等数学_第三版_上册.pdf",
-    size: 12_400_000,
-    uploaded_at: "2026-03-28T10:00:00Z",
-    status: "indexed",
-  },
-  {
-    id: "2",
-    filename: "微积分习题精解.docx",
-    size: 3_200_000,
-    uploaded_at: "2026-04-01T14:30:00Z",
-    status: "indexed",
-  },
-  {
-    id: "3",
-    filename: "线性代数补充材料.pdf",
-    size: 8_700_000,
-    uploaded_at: "2026-04-03T09:15:00Z",
-    status: "processing",
-  },
-];
-
-const mockGraph: KnowledgeGraphData = {
-  nodes: [
-    { id: "1", name: "极限", course: "math", val: 5 },
-    { id: "2", name: "连续性", course: "math", val: 4 },
-    { id: "3", name: "导数", course: "math", val: 6 },
-    { id: "4", name: "微分", course: "math", val: 4 },
-    { id: "5", name: "积分", course: "math", val: 6 },
-    { id: "6", name: "级数", course: "math", val: 3 },
-    { id: "7", name: "多元函数", course: "math", val: 5 },
-    { id: "8", name: "运动学", course: "physics", val: 4 },
-    { id: "9", name: "力学", course: "physics", val: 5 },
-    { id: "10", name: "向量空间", course: "math", val: 4 },
-  ],
-  links: [
-    { source: "1", target: "2", type: "prerequisite" },
-    { source: "2", target: "3", type: "prerequisite" },
-    { source: "3", target: "4", type: "prerequisite" },
-    { source: "3", target: "5", type: "prerequisite" },
-    { source: "5", target: "6", type: "prerequisite" },
-    { source: "5", target: "7", type: "prerequisite" },
-    { source: "3", target: "8", type: "cross-course" },
-    { source: "5", target: "9", type: "cross-course" },
-    { source: "7", target: "10", type: "prerequisite" },
-  ],
-};
+interface UploadTask {
+  id: string;
+  filename: string;
+  status: "uploading" | "processing" | "completed" | "error";
+  progress?: string; // "3/5" for PDF pages
+}
 
 function formatSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -83,6 +39,9 @@ export default function KnowledgeBasePage({
   const { id } = use(params);
   const [isDragActive, setIsDragActive] = useState(false);
   const [rebuilding, setRebuilding] = useState(false);
+  const [uploads, setUploads] = useState<UploadTask[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const queryClient = useQueryClient();
 
   const { data: docs } = useQuery({
     queryKey: ["knowledge-docs", id],
@@ -93,6 +52,56 @@ export default function KnowledgeBasePage({
     queryKey: ["knowledge-graph", id],
     queryFn: () => fetchKnowledgeGraph(id),
   });
+
+  const pollTask = useCallback(async (taskId: string, _filename: string) => {
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/knowledge/upload-status/${taskId}`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        });
+        const status = await res.json() as { status: string; progress?: string; chunk_count?: number };
+        setUploads(prev => prev.map(u => u.id === taskId ? { ...u, status: status.status as UploadTask["status"], progress: status.progress } : u));
+        if (status.status === "completed" || status.status === "error") {
+          clearInterval(interval);
+          queryClient.invalidateQueries({ queryKey: ["knowledge-docs"] });
+        }
+      } catch {
+        clearInterval(interval);
+      }
+    }, 5000);
+  }, [queryClient]);
+
+  const handleFiles = useCallback(async (files: FileList) => {
+    for (const file of Array.from(files)) {
+      const taskId = crypto.randomUUID();
+      setUploads(prev => [...prev, { id: taskId, filename: file.name, status: "uploading" }]);
+
+      const formData = new FormData();
+      formData.append("course_id", id);
+      formData.append("file", file);
+
+      try {
+        const res = await fetch(`/api/knowledge/upload`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+          body: formData,
+        });
+        const data = await res.json() as { task_id?: string; document_id?: string; chunk_count?: number };
+
+        if (data.task_id) {
+          // PDF async processing
+          setUploads(prev => prev.map(u => u.id === taskId ? { ...u, id: data.task_id!, status: "processing" } : u));
+          pollTask(data.task_id, file.name);
+        } else {
+          // Immediate completion (text files)
+          setUploads(prev => prev.map(u => u.id === taskId ? { ...u, status: "completed" } : u));
+          queryClient.invalidateQueries({ queryKey: ["knowledge-docs"] });
+        }
+      } catch {
+        setUploads(prev => prev.map(u => u.id === taskId ? { ...u, status: "error" } : u));
+      }
+    }
+  }, [id, pollTask, queryClient]);
 
   const handleRebuild = useCallback(async () => {
     setRebuilding(true);
@@ -140,10 +149,10 @@ export default function KnowledgeBasePage({
             上传课程资料并管理知识图谱
           </p>
         </div>
-        <Button
+        <button
           onClick={handleRebuild}
           disabled={rebuilding}
-          className="bg-ink-primary hover:bg-ink-primary-dark text-white"
+          className="inline-flex items-center rounded-md px-4 py-2 text-sm font-medium bg-ink-primary hover:bg-ink-primary-dark text-white disabled:opacity-50 transition-colors"
         >
           {rebuilding ? (
             <>
@@ -156,15 +165,24 @@ export default function KnowledgeBasePage({
               重建索引
             </>
           )}
-        </Button>
+        </button>
       </div>
+
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".pdf,.docx,.doc,.pptx,.ppt,.txt,.md"
+        className="hidden"
+        onChange={(e) => { if (e.target.files?.length) { handleFiles(e.target.files); e.target.value = ""; } }}
+      />
 
       {/* Upload Dropzone */}
       <div
         onDragEnter={() => setIsDragActive(true)}
         onDragLeave={() => setIsDragActive(false)}
         onDragOver={(e) => e.preventDefault()}
-        onDrop={() => setIsDragActive(false)}
+        onDrop={(e) => { e.preventDefault(); setIsDragActive(false); if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files); }}
         className={cn(
           "rounded-xl border-2 border-dashed p-8 text-center transition-colors",
           isDragActive
@@ -179,7 +197,11 @@ export default function KnowledgeBasePage({
           <div>
             <p className="text-sm font-medium text-ink-text">
               拖拽文件到此处或{" "}
-              <button className="text-ink-primary hover:underline">
+              <button
+                type="button"
+                className="text-ink-primary hover:underline"
+                onClick={() => fileInputRef.current?.click()}
+              >
                 浏览上传
               </button>
             </p>
@@ -189,6 +211,31 @@ export default function KnowledgeBasePage({
           </div>
         </div>
       </div>
+
+      {/* Upload progress */}
+      {uploads.length > 0 && (
+        <div className="space-y-2">
+          {uploads.map(u => (
+            <div key={u.id} className="flex items-center gap-3 rounded-lg border border-ink-border bg-white p-3">
+              <i className={u.status === "completed" ? "ri-checkbox-circle-fill text-ink-success" : u.status === "error" ? "ri-error-warning-fill text-ink-error" : "ri-loader-4-line animate-spin text-ink-primary"} />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-ink-text truncate">{u.filename}</p>
+                <p className="text-xs text-ink-text-muted">
+                  {u.status === "uploading" ? "上传中..." :
+                   u.status === "processing" ? `OCR 处理中 ${u.progress || ""}` :
+                   u.status === "completed" ? "导入完成" : "导入失败"}
+                </p>
+              </div>
+              {u.status === "processing" && u.progress && (
+                <div className="w-20 h-1.5 rounded-full bg-ink-surface overflow-hidden">
+                  <div className="h-full bg-ink-primary rounded-full transition-all"
+                       style={{ width: `${parseInt(u.progress.split("/")[0]) / parseInt(u.progress.split("/")[1]) * 100}%` }} />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Documents List */}
       <div className="rounded-xl border border-ink-border bg-white overflow-hidden">
