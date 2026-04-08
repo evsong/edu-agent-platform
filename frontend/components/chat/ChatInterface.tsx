@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
@@ -28,6 +28,10 @@ interface ChatInterfaceProps {
   className?: string;
 }
 
+export interface ChatInterfaceHandle {
+  sendMessage: (text: string) => void;
+}
+
 /* ── Helpers ── */
 function generateId() {
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -41,10 +45,10 @@ function formatTime(date: Date) {
 }
 
 /* ── Component ── */
-export default function ChatInterface({
+const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(function ChatInterface({
   courseId,
   className,
-}: ChatInterfaceProps) {
+}: ChatInterfaceProps, ref) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
@@ -68,8 +72,8 @@ export default function ChatInterface({
   }, [input]);
 
   /* ── send message ── */
-  const sendMessage = useCallback(async () => {
-    const text = input.trim();
+  const doSend = useCallback(async (overrideText?: string) => {
+    const text = (overrideText ?? input).trim();
     if (!text || isStreaming) return;
 
     setError(null);
@@ -210,6 +214,19 @@ export default function ChatInterface({
       abortRef.current = null;
     }
   }, [input, isStreaming, courseId]);
+
+  /* ── public sendMessage wrapper ── */
+  const sendMessage = useCallback(() => {
+    doSend();
+  }, [doSend]);
+
+  /* ── imperative handle for parent components ── */
+  useImperativeHandle(ref, () => ({
+    sendMessage: (text: string) => {
+      if (isStreaming) return;
+      doSend(text);
+    },
+  }), [isStreaming, doSend]);
 
   /* ── keyboard handler ── */
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -409,4 +426,6 @@ export default function ChatInterface({
       </div>
     </div>
   );
-}
+});
+
+export default ChatInterface;
