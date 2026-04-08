@@ -8,8 +8,9 @@ Populates PostgreSQL and Neo4j with demo data for competition:
   - Course enrollments
   - Knowledge points
   - Exercises (25 math + 15 physics)
-  - Assignments + submissions
+  - Assignments + submissions (3 assignments, 8 submissions)
   - Student profiles with BKT states
+  - xAPI statements (~75 learning activity records)
   - Neo4j knowledge graph
 
 Usage:
@@ -22,6 +23,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import random
 import sys
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -45,6 +47,7 @@ from app.models.knowledge_point import KnowledgePoint
 from app.models.exercise import Exercise
 from app.models.student_profile import StudentProfile
 from app.models.agent_config import AgentConfig
+from app.models.xapi_statement import XAPIStatement
 
 # ── Paths ────────────────────────────────────────────────────
 DATA_DIR = Path(__file__).resolve().parent
@@ -62,6 +65,10 @@ STUDENT_IDS = [
 ]
 MATH_COURSE_ID = uuid.UUID("00000000-0000-4000-b000-000000000001")
 PHYSICS_COURSE_ID = uuid.UUID("00000000-0000-4000-b000-000000000002")
+
+ASSIGNMENT_1_ID = uuid.UUID("00000000-0000-4000-c000-000000000001")  # existing: 定积分
+ASSIGNMENT_2_ID = uuid.UUID("00000000-0000-4000-c000-000000000002")  # new: 级数
+ASSIGNMENT_3_ID = uuid.UUID("00000000-0000-4000-c000-000000000003")  # new: 牛顿力学
 
 STUDENT_NAMES = ["张三", "李四", "王五", "赵六", "陈七"]
 STUDENT_EMAILS = [f"student{i}@demo.com" for i in range(1, 6)]
@@ -336,7 +343,7 @@ async def seed_exercises(session: AsyncSession) -> None:
 
 async def seed_assignments(session: AsyncSession) -> None:
     """Create a sample math assignment + submissions."""
-    assignment_id = uuid.UUID("00000000-0000-4000-c000-000000000001")
+    assignment_id = ASSIGNMENT_1_ID
     now = datetime.now(timezone.utc)
 
     assignment = Assignment(
@@ -500,6 +507,378 @@ async def seed_agent_configs(session: AsyncSession) -> None:
     print(f"  [+] Created {len(configs)} agent configs")
 
 
+async def seed_additional_assignments(session: AsyncSession) -> None:
+    """Create 2 more assignments + 3 submissions for the physics one."""
+    now = datetime.now(timezone.utc)
+
+    # ── Math assignment: 级数 (pending, no submissions yet) ──
+    math_hw = Assignment(
+        id=ASSIGNMENT_2_ID,
+        course_id=MATH_COURSE_ID,
+        title="第四次作业-级数",
+        content=(
+            "1. 判断级数 Σ(1/n²) 的敛散性\n"
+            "2. 求幂级数 Σ(xⁿ/n!) 的收敛半径\n"
+            "3. 将 f(x)=eˣ 展开为麦克劳林级数\n"
+            "4. 利用逐项积分求 Σ((-1)ⁿ/(2n+1)) 的和"
+        ),
+        due_date=now + timedelta(days=3),
+        grading_rules={
+            "total_points": 100,
+            "questions": [
+                {"id": 1, "points": 20, "type": "判断"},
+                {"id": 2, "points": 25, "type": "calculation"},
+                {"id": 3, "points": 25, "type": "calculation"},
+                {"id": 4, "points": 30, "type": "calculation"},
+            ],
+        },
+    )
+
+    # ── Physics assignment: 牛顿力学 (3 submissions) ──
+    phys_hw = Assignment(
+        id=ASSIGNMENT_3_ID,
+        course_id=PHYSICS_COURSE_ID,
+        title="第一次实验报告-牛顿力学",
+        content=(
+            "实验目的：验证牛顿第二运动定律 F=ma\n"
+            "要求：\n"
+            "1. 描述实验装置和原理\n"
+            "2. 记录实验数据（至少5组）\n"
+            "3. 用图表分析 F 与 a 的关系\n"
+            "4. 讨论误差来源和改进方案"
+        ),
+        due_date=now + timedelta(days=5),
+        grading_rules={
+            "total_points": 100,
+            "sections": [
+                {"id": 1, "points": 15, "type": "装置描述"},
+                {"id": 2, "points": 25, "type": "数据记录"},
+                {"id": 3, "points": 35, "type": "数据分析"},
+                {"id": 4, "points": 25, "type": "误差讨论"},
+            ],
+        },
+    )
+    session.add_all([math_hw, phys_hw])
+    await session.flush()
+
+    # Submissions for the physics assignment
+    phys_submissions = [
+        Submission(
+            assignment_id=ASSIGNMENT_3_ID,
+            student_id=STUDENT_IDS[0],  # 张三
+            content=(
+                "一、实验装置：光滑导轨、滑块、弹簧测力计、光电计时器。\n"
+                "二、原理：F=ma，通过改变外力测量加速度。\n"
+                "三、数据：(0.5N,0.25m/s²), (1.0N,0.51m/s²), (1.5N,0.74m/s²), "
+                "(2.0N,1.02m/s²), (2.5N,1.24m/s²)\n"
+                "四、分析：线性拟合 R²=0.998，斜率=2.01kg，与滑块质量2.0kg吻合。\n"
+                "五、误差来源：摩擦力、空气阻力、计时精度。改进：使用气垫导轨。"
+            ),
+            status="graded",
+            score=85.0,
+            annotations={
+                "auto_graded": True,
+                "feedback": "数据分析完整，图表清晰。误差讨论可以更深入。",
+            },
+        ),
+        Submission(
+            assignment_id=ASSIGNMENT_3_ID,
+            student_id=STUDENT_IDS[2],  # 王五
+            content=(
+                "实验装置：导轨+滑块+砝码。\n"
+                "原理：牛顿第二定律。\n"
+                "数据：(1N,0.48), (2N,0.99), (3N,1.52), (4N,1.98), (5N,2.51)\n"
+                "分析：F和a成正比关系，拟合得m≈2.0kg。\n"
+                "误差：测量不准确。"
+            ),
+            status="graded",
+            score=72.0,
+            annotations={
+                "auto_graded": True,
+                "feedback": "实验过程描述过于简略，缺少单位标注，误差分析需要具体化。",
+            },
+        ),
+        Submission(
+            assignment_id=ASSIGNMENT_3_ID,
+            student_id=STUDENT_IDS[3],  # 赵六
+            content=(
+                "一、装置：气垫导轨、光电门、砝码组、电子天平。\n"
+                "二、原理：在摩擦力可忽略的条件下验证F=ma。\n"
+                "三、数据记录：\n"
+                "组1: F=0.49N, a=0.245m/s²\n"
+                "组2: F=0.98N, a=0.490m/s²\n"
+                "组3: F=1.47N, a=0.732m/s²\n"
+                "组4: F=1.96N, a=0.981m/s²\n"
+                "组5: F=2.45N, a=1.220m/s²\n"
+                "四、分析：待完成"
+            ),
+            status="submitted",
+            score=None,
+            annotations=None,
+        ),
+    ]
+    session.add_all(phys_submissions)
+    await session.flush()
+    print("  [+] Created 2 additional assignments (级数 + 牛顿力学) with 3 submissions")
+
+
+async def seed_xapi_statements(session: AsyncSession) -> None:
+    """Create ~70 xAPI statements simulating realistic learning activities."""
+    random.seed(42)  # reproducible but varied
+    now = datetime.now(timezone.utc)
+
+    def _ts(hours_ago: float) -> datetime:
+        """Return a timestamp `hours_ago` before now."""
+        return now - timedelta(hours=hours_ago)
+
+    statements: list[XAPIStatement] = []
+
+    # ── Helper: stable UUID from a seed string ──
+    def _sid(seed: str) -> uuid.UUID:
+        return uuid.uuid5(uuid.NAMESPACE_DNS, f"eduagent.xapi.{seed}")
+
+    # ================================================================
+    # 1) QA interactions  (verb="asked", object_type="question")
+    # ================================================================
+    qa_data: list[tuple[int, list[tuple[str, str, str]]]] = [
+        # (student_index, [(question_summary, topic_kp, course_key), ...])
+        (0, [  # 张三: 15 math questions
+            ("定积分的几何意义是什么？", "MATH-CALC-002", "math"),
+            ("怎么计算∫₀¹ x²dx？", "MATH-CALC-002", "math"),
+            ("定积分中值定理怎么用？", "MATH-CALC-003", "math"),
+            ("牛顿-莱布尼茨公式的证明思路？", "MATH-CALC-002", "math"),
+            ("p级数的敛散性怎么判断？", "MATH-SERIES-001", "math"),
+            ("比值审敛法怎么用？", "MATH-SERIES-001", "math"),
+            ("幂级数的收敛区间怎么求？", "MATH-SERIES-002", "math"),
+            ("行列式展开定理怎么理解？", "MATH-DET-001", "math"),
+            ("克莱默法则什么时候能用？", "MATH-DET-001", "math"),
+            ("行列式和矩阵有什么区别？", "MATH-DET-001", "math"),
+            ("行列式为零意味着什么？", "MATH-DET-001", "math"),
+            ("向量叉积的几何意义？", "MATH-VEC-001", "math"),
+            ("向量的线性相关怎么判断？", "MATH-VEC-001", "math"),
+            ("数列极限的ε-N定义怎么理解？", "MATH-LIMIT-001", "math"),
+            ("函数极限的ε-δ语言？", "MATH-LIMIT-002", "math"),
+        ]),
+        (1, [  # 李四: 8 math questions (mostly 微分, 极限)
+            ("导数的物理意义是什么？", "MATH-DIFF-001", "math"),
+            ("复合函数怎么求导？", "MATH-DIFF-001", "math"),
+            ("隐函数求导怎么做？", "MATH-DIFF-001", "math"),
+            ("洛必达法则什么时候能用？", "MATH-LIMIT-002", "math"),
+            ("极限的四则运算法则？", "MATH-LIMIT-001", "math"),
+            ("夹逼准则怎么用？", "MATH-LIMIT-001", "math"),
+            ("参数方程求导？", "MATH-DIFF-001", "math"),
+            ("无穷小的比较怎么做？", "MATH-LIMIT-002", "math"),
+        ]),
+        (2, [  # 王五: 10 physics questions
+            ("牛顿第三定律的应用场景？", "PHY-MECH-001", "physics"),
+            ("自由体图怎么画？", "PHY-MECH-001", "physics"),
+            ("摩擦力怎么计算？", "PHY-MECH-001", "physics"),
+            ("功的定义和计算？", "PHY-MECH-002", "physics"),
+            ("势能和动能的转换？", "PHY-MECH-002", "physics"),
+            ("动能定理怎么用？", "PHY-MECH-003", "physics"),
+            ("位移和路程的区别？", "PHY-KIN-001", "physics"),
+            ("平抛运动的分解？", "PHY-KIN-002", "physics"),
+            ("匀变速直线运动公式？", "PHY-KIN-002", "physics"),
+            ("参考系的选择对运动描述的影响？", "PHY-KIN-001", "physics"),
+        ]),
+        (3, [  # 赵六: 12 questions about both courses
+            ("不定积分的换元法？", "MATH-CALC-001", "math"),
+            ("分部积分的技巧？", "MATH-CALC-001", "math"),
+            ("泰勒展开的余项？", "MATH-SERIES-002", "math"),
+            ("极限存在的充要条件？", "MATH-LIMIT-001", "math"),
+            ("高阶导数的求法？", "MATH-DIFF-001", "math"),
+            ("变限积分的求导？", "MATH-CALC-002", "math"),
+            ("动量守恒的条件？", "PHY-MOM-001", "physics"),
+            ("完全弹性碰撞？", "PHY-MOM-001", "physics"),
+            ("功率的瞬时值和平均值？", "PHY-MECH-002", "physics"),
+            ("向心加速度的推导？", "PHY-KIN-002", "physics"),
+            ("角动量守恒？", "PHY-MOM-001", "physics"),
+            ("能量守恒定律的应用？", "PHY-MECH-003", "physics"),
+        ]),
+        (4, [  # 陈七: 10 questions about both courses
+            ("级数的绝对收敛和条件收敛？", "MATH-SERIES-001", "math"),
+            ("柯西收敛准则？", "MATH-SERIES-001", "math"),
+            ("傅里叶级数和幂级数的关系？", "MATH-SERIES-002", "math"),
+            ("行列式的性质和计算技巧？", "MATH-DET-001", "math"),
+            ("定积分的应用（面积、体积）？", "MATH-CALC-002", "math"),
+            ("牛顿运动定律的局限性？", "PHY-MECH-001", "physics"),
+            ("弹性势能的公式推导？", "PHY-MECH-002", "physics"),
+            ("匀速圆周运动的条件？", "PHY-KIN-002", "physics"),
+            ("冲量定理和动量定理的区别？", "PHY-MOM-001", "physics"),
+            ("运动的叠加原理？", "PHY-KIN-001", "physics"),
+        ]),
+    ]
+
+    for student_idx, questions in qa_data:
+        for q_i, (question, kp_ext_id, course_key) in enumerate(questions):
+            course_id = MATH_COURSE_ID if course_key == "math" else PHYSICS_COURSE_ID
+            hours_ago = random.uniform(1, 168)  # last 7 days
+            statements.append(XAPIStatement(
+                id=_sid(f"qa-{student_idx}-{q_i}"),
+                user_id=STUDENT_IDS[student_idx],
+                verb="asked",
+                object_type="question",
+                object_id=question,
+                result_score=None,
+                result_success=None,
+                context={
+                    "course_id": str(course_id),
+                    "knowledge_point": kp_ext_id,
+                    "topic": KP_DATA[kp_ext_id]["name"],
+                },
+                timestamp=_ts(hours_ago),
+            ))
+
+    # ================================================================
+    # 2) Practice exercises  (verb="completed", object_type="exercise")
+    # ================================================================
+    # Map each student to exercises they attempted, with success based on mastery
+    exercise_data: list[tuple[int, list[tuple[str, str]]]] = [
+        # (student_idx, [(kp_ext_id, course_key), ...])
+        (0, [  # 张三: 8 exercises — strong at 极限, weak at 行列式
+            ("MATH-LIMIT-001", "math"), ("MATH-LIMIT-002", "math"),
+            ("MATH-CALC-002", "math"), ("MATH-CALC-003", "math"),
+            ("MATH-DET-001", "math"), ("MATH-DET-001", "math"),
+            ("MATH-VEC-001", "math"), ("MATH-SERIES-001", "math"),
+        ]),
+        (1, [  # 李四: 7 exercises — weak at 微分/级数
+            ("MATH-DIFF-001", "math"), ("MATH-DIFF-001", "math"),
+            ("MATH-LIMIT-001", "math"), ("MATH-LIMIT-002", "math"),
+            ("MATH-SERIES-001", "math"), ("MATH-CALC-001", "math"),
+            ("MATH-CALC-002", "math"),
+        ]),
+        (2, [  # 王五: 6 exercises — physics focus
+            ("PHY-MECH-001", "physics"), ("PHY-MECH-002", "physics"),
+            ("PHY-KIN-001", "physics"), ("PHY-KIN-002", "physics"),
+            ("MATH-LIMIT-001", "math"), ("MATH-CALC-001", "math"),
+        ]),
+        (3, [  # 赵六: 10 exercises — good at everything
+            ("MATH-LIMIT-001", "math"), ("MATH-DIFF-001", "math"),
+            ("MATH-CALC-002", "math"), ("MATH-SERIES-001", "math"),
+            ("MATH-DET-001", "math"), ("PHY-MECH-001", "physics"),
+            ("PHY-MECH-002", "physics"), ("PHY-KIN-001", "physics"),
+            ("PHY-MOM-001", "physics"), ("MATH-CALC-001", "math"),
+        ]),
+        (4, [  # 陈七: 8 exercises — good at most things
+            ("MATH-LIMIT-001", "math"), ("MATH-SERIES-001", "math"),
+            ("MATH-SERIES-002", "math"), ("MATH-DET-001", "math"),
+            ("PHY-MECH-001", "physics"), ("PHY-KIN-001", "physics"),
+            ("PHY-MOM-001", "physics"), ("MATH-CALC-002", "math"),
+        ]),
+    ]
+
+    for student_idx, exercises in exercise_data:
+        mastery_overrides = STUDENT_PROFILES_CONFIG[student_idx]["overrides"]
+        for ex_i, (kp_ext_id, course_key) in enumerate(exercises):
+            course_id = MATH_COURSE_ID if course_key == "math" else PHYSICS_COURSE_ID
+            # Success probability based on mastery level
+            mastery = mastery_overrides.get(kp_ext_id, 0.5)
+            success = random.random() < mastery
+            hours_ago = random.uniform(2, 160)
+            statements.append(XAPIStatement(
+                id=_sid(f"ex-{student_idx}-{ex_i}"),
+                user_id=STUDENT_IDS[student_idx],
+                verb="completed",
+                object_type="exercise",
+                object_id=f"exercise-{kp_ext_id}-{ex_i}",
+                result_score=1.0 if success else 0.0,
+                result_success=success,
+                context={
+                    "course_id": str(course_id),
+                    "knowledge_point": kp_ext_id,
+                    "topic": KP_DATA[kp_ext_id]["name"],
+                },
+                timestamp=_ts(hours_ago),
+            ))
+
+    # ================================================================
+    # 3) Grading events  (verb="graded", object_type="submission")
+    # ================================================================
+    # One per student for the original math assignment
+    original_scores = [92.0, 55.0, 78.0, 95.0, 88.0]
+    for student_idx, score in enumerate(original_scores):
+        statements.append(XAPIStatement(
+            id=_sid(f"grade-a1-{student_idx}"),
+            user_id=STUDENT_IDS[student_idx],
+            verb="graded",
+            object_type="submission",
+            object_id=f"submission-{ASSIGNMENT_1_ID}-{STUDENT_IDS[student_idx]}",
+            result_score=round(score / 100.0, 2),
+            result_success=score >= 60.0,
+            context={
+                "course_id": str(MATH_COURSE_ID),
+                "assignment_id": str(ASSIGNMENT_1_ID),
+                "assignment_title": "第三次作业-定积分",
+            },
+            timestamp=_ts(random.uniform(12, 48)),
+        ))
+
+    # Grading events for physics assignment (张三 and 王五 graded)
+    phys_graded = [(0, 85.0), (2, 72.0)]
+    for student_idx, score in phys_graded:
+        statements.append(XAPIStatement(
+            id=_sid(f"grade-a3-{student_idx}"),
+            user_id=STUDENT_IDS[student_idx],
+            verb="graded",
+            object_type="submission",
+            object_id=f"submission-{ASSIGNMENT_3_ID}-{STUDENT_IDS[student_idx]}",
+            result_score=round(score / 100.0, 2),
+            result_success=score >= 60.0,
+            context={
+                "course_id": str(PHYSICS_COURSE_ID),
+                "assignment_id": str(ASSIGNMENT_3_ID),
+                "assignment_title": "第一次实验报告-牛顿力学",
+            },
+            timestamp=_ts(random.uniform(6, 24)),
+        ))
+
+    # ================================================================
+    # 4) Knowledge point interactions (verb="answered", object_type="knowledge_point")
+    # ================================================================
+    # Simulate individual KP mastery checks from practice sessions
+    kp_interaction_data: list[tuple[int, list[str]]] = [
+        (0, ["MATH-LIMIT-001", "MATH-LIMIT-002", "MATH-DET-001", "MATH-VEC-001",
+             "MATH-CALC-002", "MATH-SERIES-001"]),
+        (1, ["MATH-DIFF-001", "MATH-LIMIT-001", "MATH-LIMIT-002", "MATH-SERIES-001",
+             "MATH-CALC-001"]),
+        (2, ["PHY-MECH-001", "PHY-KIN-001", "PHY-KIN-002", "PHY-MECH-002",
+             "MATH-LIMIT-001"]),
+        (3, ["MATH-LIMIT-001", "MATH-CALC-002", "MATH-DIFF-001", "PHY-MECH-001",
+             "PHY-MOM-001", "PHY-KIN-001"]),
+        (4, ["MATH-SERIES-001", "MATH-DET-001", "PHY-MECH-001", "PHY-KIN-001",
+             "MATH-CALC-002"]),
+    ]
+
+    for student_idx, kp_list in kp_interaction_data:
+        mastery_overrides = STUDENT_PROFILES_CONFIG[student_idx]["overrides"]
+        for kp_i, kp_ext_id in enumerate(kp_list):
+            mastery = mastery_overrides.get(kp_ext_id, 0.5)
+            success = random.random() < mastery
+            course_key = KP_DATA[kp_ext_id]["course"]
+            course_id = MATH_COURSE_ID if course_key == "math" else PHYSICS_COURSE_ID
+            hours_ago = random.uniform(3, 144)
+            statements.append(XAPIStatement(
+                id=_sid(f"kp-{student_idx}-{kp_i}"),
+                user_id=STUDENT_IDS[student_idx],
+                verb="answered",
+                object_type="knowledge_point",
+                object_id=str(KP_UUIDS[kp_ext_id]),
+                result_score=1.0 if success else 0.0,
+                result_success=success,
+                context={
+                    "course_id": str(course_id),
+                    "knowledge_point": kp_ext_id,
+                    "topic": KP_DATA[kp_ext_id]["name"],
+                    "mastery_before": round(mastery, 2),
+                },
+                timestamp=_ts(hours_ago),
+            ))
+
+    session.add_all(statements)
+    await session.flush()
+    print(f"  [+] Created {len(statements)} xAPI statements")
+
+
 async def seed_neo4j() -> None:
     """Load the cypher file into Neo4j."""
     try:
@@ -553,7 +932,7 @@ async def main() -> None:
     # Create tables if they don't exist
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    print("[1/9] Tables ensured")
+    print("[1/11] Tables ensured")
 
     async with async_session() as session:
         async with session.begin():
@@ -564,29 +943,35 @@ async def main() -> None:
                 print("    Run: DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
                 return
 
-            print("[2/9] Seeding users...")
+            print("[2/11] Seeding users...")
             await seed_users(session)
 
-            print("[3/9] Seeding courses...")
+            print("[3/11] Seeding courses...")
             await seed_courses(session)
 
-            print("[4/9] Seeding enrollments...")
+            print("[4/11] Seeding enrollments...")
             await seed_enrollments(session)
 
-            print("[5/9] Seeding knowledge points...")
+            print("[5/11] Seeding knowledge points...")
             await seed_knowledge_points(session)
 
-            print("[6/9] Seeding exercises...")
+            print("[6/11] Seeding exercises...")
             await seed_exercises(session)
 
-            print("[7/9] Seeding assignments & submissions...")
+            print("[7/11] Seeding assignments & submissions...")
             await seed_assignments(session)
 
-            print("[8/9] Seeding student profiles (BKT)...")
+            print("[8/11] Seeding additional assignments...")
+            await seed_additional_assignments(session)
+
+            print("[9/11] Seeding student profiles (BKT)...")
             await seed_student_profiles(session)
 
-            print("[9/9] Seeding agent configs...")
+            print("[10/11] Seeding agent configs...")
             await seed_agent_configs(session)
+
+            print("[11/11] Seeding xAPI statements...")
+            await seed_xapi_statements(session)
 
         # Commit happens automatically when the `begin()` block exits
 
