@@ -41,15 +41,50 @@ class BKTUpdateRequest(BaseModel):
 @router.get("/overview")
 async def get_overview(db: AsyncSession = Depends(get_db)):
     """Return aggregated dashboard stats across all courses."""
+    import json
+    from app.services.cache import cache_get, cache_set
+
+    try:
+        cached = await cache_get("analytics:overview")
+        if cached:
+            return json.loads(cached)
+    except Exception:
+        pass  # Redis down → skip cache
+
     svc = _get_service()
-    return await svc.get_overview(db)
+    result = await svc.get_overview(db)
+
+    try:
+        await cache_set("analytics:overview", json.dumps(result, default=str), ttl=60)
+    except Exception:
+        pass
+
+    return result
 
 
 @router.get("/mastery/{course_id}")
 async def get_mastery(course_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     """Return average mastery per knowledge point for a course."""
+    import json
+    from app.services.cache import cache_get, cache_set
+
+    cache_key = f"analytics:mastery:{course_id}"
+    try:
+        cached = await cache_get(cache_key)
+        if cached:
+            return json.loads(cached)
+    except Exception:
+        pass
+
     svc = _get_service()
-    return await svc.get_mastery_aggregation(db, course_id)
+    result = await svc.get_mastery_aggregation(db, course_id)
+
+    try:
+        await cache_set(cache_key, json.dumps(result, default=str), ttl=60)
+    except Exception:
+        pass
+
+    return result
 
 
 @router.get("/profile/{user_id}")

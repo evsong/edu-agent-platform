@@ -4,6 +4,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 
 from app.database import Base, engine
 from app.api.auth import router as auth_router
@@ -43,6 +45,28 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+
+# ── Rate-limiting middleware (Redis-backed) ──────────────────────
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        if request.url.path.startswith("/api/"):
+            client_ip = request.client.host if request.client else "unknown"
+            from app.services.cache import rate_limit_check
+            try:
+                allowed = await rate_limit_check(
+                    f"rate:{client_ip}", max_requests=100, window=60
+                )
+                if not allowed:
+                    return JSONResponse(
+                        {"detail": "Rate limit exceeded"}, status_code=429
+                    )
+            except Exception:
+                pass  # Redis down → allow request
+        return await call_next(request)
+
+
+app.add_middleware(RateLimitMiddleware)
 
 # CORS
 app.add_middleware(
