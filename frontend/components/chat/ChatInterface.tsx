@@ -7,6 +7,15 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 
+/** Convert LLM LaTeX delimiters to remark-math format: [ ... ] → $$...$$ and ( ... ) → $...$ */
+function convertLatex(text: string): string {
+  // Display math: [ ... ] → $$...$$  (must come first to avoid conflict with inline)
+  let result = text.replace(/\\\[\s*([\s\S]*?)\s*\\\]/g, (_m, p1) => `$$${p1}$$`);
+  // Inline math: ( ... ) → $...$
+  result = result.replace(/\\\(\s*([\s\S]*?)\s*\\\)/g, (_m, p1) => `$${p1}$`);
+  return result;
+}
+
 /* ── Types ── */
 interface ChatAction {
   name: string;
@@ -306,7 +315,7 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(functi
               >
                 {msg.role === "assistant" ? (
                   <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-                    {msg.content}
+                    {convertLatex(msg.content)}
                   </ReactMarkdown>
                 ) : (
                   <span className="whitespace-pre-wrap">{msg.content}</span>
