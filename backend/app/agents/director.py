@@ -125,11 +125,19 @@ async def director_node(state: DirectorState, config: dict) -> dict:
     llm_client: LLMClient = config["configurable"]["llm_client"]
     try:
         raw_response = await llm_client.chat(
-            messages=[{"role": "user", "content": prompt_text}],
+            messages=[
+                {
+                    "role": "system",
+                    "content": "你是一个路由器。只输出一个 agent_id 或 END。不要输出其他内容。",
+                },
+                {"role": "user", "content": prompt_text},
+            ],
         )
     except Exception:
         logger.exception("Director: LLM call failed — fallback to 'qa'")
         raw_response = "qa" if not agent_responses else "end"
+
+    logger.info("Director: LLM raw response = '%s'", raw_response[:100] if raw_response else "(empty)")
 
     # ── Parse response ───────────────────────────────────────────────
     cleaned = raw_response.strip().strip('"').strip("'").lower()
@@ -153,6 +161,21 @@ async def director_node(state: DirectorState, config: dict) -> dict:
                 agent_id = aid
                 break
 
+    # Keyword-based fallback when LLM returns empty or unparseable
+    if agent_id is None:
+        msg_lower = latest_message.lower()
+        keyword_map = [
+            (["批改", "批注", "评分", "打分"], "grader"),
+            (["分析", "学情", "画像", "掌握"], "analyst"),
+            (["练习", "出题", "做题", "习题"], "tutor"),
+            (["配置", "设置", "管理", "agent"], "meta"),
+        ]
+        for keywords, aid in keyword_map:
+            if aid in registered and any(k in msg_lower for k in keywords):
+                agent_id = aid
+                logger.info("Director: keyword fallback matched '%s'", aid)
+                break
+
     # If continuation turn and can't parse → assume done
     if agent_id is None and agent_responses:
         logger.info("Director: continuation parse failed — assuming done")
@@ -162,7 +185,7 @@ async def director_node(state: DirectorState, config: dict) -> dict:
     if agent_id is None:
         logger.warning(
             "Director: could not parse agent_id from '%s' — fallback to 'qa'",
-            raw_response[:100],
+            raw_response[:100] if raw_response else "(empty)",
         )
         agent_id = "qa" if "qa" in registered else next(iter(registered))
 
