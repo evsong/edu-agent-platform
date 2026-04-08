@@ -117,18 +117,19 @@ export default function GradingDetailPage({
     queryFn: () => fetchGradingDetail(id),
   });
 
-  // Build the detail object from real submission data, with mock as fallback
-  const detail = useMemo<GradingDetail>(() => {
-    if (!submission) return parsedAnnotations ?? mockDetail;
+  // Build the detail object from real submission data
+  const detail = useMemo<GradingDetail | null>(() => {
+    if (!submission && !parsedAnnotations) return null;
+    if (!submission) return parsedAnnotations ?? null;
     return {
       id: submission.submission_id || id,
-      student_name: submission.student_name || mockDetail.student_name,
-      assignment_title: submission.assignment_title || mockDetail.assignment_title,
-      content: submission.content || mockDetail.content,
-      score: submission.score ?? mockDetail.score,
+      student_name: submission.student_name || "",
+      assignment_title: submission.assignment_title || "",
+      content: submission.content || "",
+      score: submission.score ?? 0,
       annotations: parsedAnnotations?.annotations?.length
         ? parsedAnnotations.annotations
-        : mockDetail.annotations,
+        : [],
     };
   }, [submission, parsedAnnotations, id]);
 
@@ -152,13 +153,17 @@ export default function GradingDetailPage({
       </h1>
 
       {/* The grading drawer opens as a side sheet */}
-      <GradingDrawer
-        open={true}
-        onOpenChange={(open) => {
-          if (!open) router.push("/teacher/grading");
-        }}
-        detail={detail ?? mockDetail}
-      />
+      {detail ? (
+        <GradingDrawer
+          open={true}
+          onOpenChange={(open) => {
+            if (!open) router.push("/teacher/grading");
+          }}
+          detail={detail}
+        />
+      ) : (
+        <p className="text-sm text-ink-text-muted">加载批改数据中...</p>
+      )}
     </motion.div>
   );
 }

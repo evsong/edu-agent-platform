@@ -121,7 +121,17 @@ export default function ProfilePage() {
     enabled: !!user?.id,
   });
 
-  const data = profile ?? mockProfile;
+  if (!profile) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-heading font-bold text-ink-text">能力画像</h1>
+          <p className="mt-1 text-sm text-ink-text-muted">加载中...</p>
+        </div>
+      </div>
+    );
+  }
+  const data = profile;
 
   const radarData = data.knowledge_points.map((kp) => ({
     subject: kp.name,

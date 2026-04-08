@@ -45,7 +45,14 @@ export default function CourseDetailPage({
   });
   const students = studentsData?.students ?? [];
 
-  const c = course ?? mockCourse;
+  if (!course) {
+    return (
+      <div className="space-y-4">
+        <p className="text-sm text-ink-text-muted">加载课程信息中...</p>
+      </div>
+    );
+  }
+  const c = course;
 
   return (
     <motion.div

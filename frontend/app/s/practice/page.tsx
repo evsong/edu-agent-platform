@@ -163,8 +163,6 @@ export default function PracticePage() {
   const [showResult, setShowResult] = useState(false);
   const [lastResult, setLastResult] = useState<AnswerResult | null>(null);
   const [selectedCourse] = useState("高等数学 A");
-  // Fallback index for mock exercises when API is unavailable
-  const [mockIndex, setMockIndex] = useState(0);
 
   /* ── Fetch exercise from API ── */
   const { data: apiExercise, refetch: fetchNextExercise } = useQuery({
@@ -197,17 +195,17 @@ export default function PracticePage() {
     enabled: !!user?.id,
   });
 
-  // Derive knowledge points from profile or fall back to mock
+  // Derive knowledge points from profile
   const knowledgePoints: KnowledgePoint[] = profile?.bkt_states
     ? Object.entries(profile.bkt_states).map(([key, val]) => ({
         name: val.name || key,
         mastery: val.mastery ?? 0,
       }))
-    : mockKnowledgePoints;
+    : [];
 
-  // Current exercise: prefer API, fall back to mock
-  const currentExercise = apiExercise ?? mockExercises[mockIndex] ?? mockExercises[0];
-  const totalExercises = apiExercise ? answeredCount + 5 : mockExercises.length;
+  // Current exercise: prefer API, show loading when unavailable
+  const currentExercise = apiExercise ?? null;
+  const totalExercises = apiExercise ? answeredCount + 5 : 0;
 
   /* ── Submit answer mutation ── */
   const answerMutation = useMutation({
@@ -217,7 +215,7 @@ export default function PracticePage() {
         body: JSON.stringify({
           user_id: user!.id,
           course_id: MATH_COURSE_ID,
-          exercise_id: currentExercise.id,
+          exercise_id: currentExercise!.id,
           answer,
         }),
       });
@@ -241,13 +239,8 @@ export default function PracticePage() {
       }, 2500);
     },
     onError: () => {
-      // API failed — use local mock fallback behavior
+      // API failed — just increment count, next exercise will be fetched on retry
       setAnsweredCount((c) => c + 1);
-      setTimeout(() => {
-        if (mockIndex < mockExercises.length - 1) {
-          setMockIndex((i) => i + 1);
-        }
-      }, 2000);
     },
   });
 
@@ -255,17 +248,9 @@ export default function PracticePage() {
     (answer: string) => {
       if (user?.id) {
         answerMutation.mutate(answer);
-      } else {
-        // No user — pure local mock fallback
-        setAnsweredCount((c) => c + 1);
-        setTimeout(() => {
-          if (mockIndex < mockExercises.length - 1) {
-            setMockIndex((i) => i + 1);
-          }
-        }, 2000);
       }
     },
-    [user?.id, answerMutation, mockIndex],
+    [user?.id, answerMutation],
   );
 
   const currentKP = knowledgePoints.find(
@@ -331,7 +316,7 @@ export default function PracticePage() {
       </motion.div>
 
       {/* Practice card */}
-      {currentExercise && (
+      {currentExercise ? (
         <PracticeCard
           key={currentExercise.id}
           question={currentExercise.question}
@@ -346,26 +331,13 @@ export default function PracticePage() {
           current={answeredCount + 1}
           total={totalExercises}
         />
+      ) : (
+        <div className="rounded-xl border border-ink-border bg-white p-6 text-center">
+          <p className="text-sm text-ink-text-muted">加载练习中...</p>
+        </div>
       )}
 
-      {/* Completion message (only for mock mode) */}
-      {!apiExercise && answeredCount >= mockExercises.length && (
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="rounded-xl border border-ink-success bg-ink-success-light p-6 text-center"
-        >
-          <div className="flex h-12 w-12 mx-auto items-center justify-center rounded-full bg-ink-success text-white mb-3">
-            <i className="ri-trophy-line text-xl" />
-          </div>
-          <h3 className="text-lg font-heading font-bold text-ink-success">
-            练习完成！
-          </h3>
-          <p className="mt-1 text-sm text-ink-text-muted">
-            本轮练习已完成，你的知识点掌握度已更新
-          </p>
-        </motion.div>
-      )}
+      {/* Completion message */}
     </motion.div>
   );
 }

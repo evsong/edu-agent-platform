@@ -81,7 +81,35 @@ export default function CourseAnalyticsPage({
     },
   });
 
-  const data = analytics ?? mockAnalytics;
+  if (!analytics) {
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="space-y-6"
+      >
+        <nav className="flex items-center gap-1.5 text-sm text-ink-text-muted">
+          <Link href="/teacher/courses" className="hover:text-ink-primary transition-colors">
+            课程管理
+          </Link>
+          <i className="ri-arrow-right-s-line text-ink-text-light" />
+          <Link
+            href={`/teacher/courses/${id}`}
+            className="hover:text-ink-primary transition-colors"
+          >
+            课程详情
+          </Link>
+          <i className="ri-arrow-right-s-line text-ink-text-light" />
+          <span className="text-ink-text font-medium">学情分析</span>
+        </nav>
+        <div>
+          <h1 className="text-2xl font-heading font-bold text-ink-text">学情分析</h1>
+          <p className="mt-1 text-sm text-ink-text-muted">加载数据中...</p>
+        </div>
+      </motion.div>
+    );
+  }
+  const data = analytics;
 
   return (
     <motion.div
