@@ -66,6 +66,8 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(functi
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const currentAssistantIdRef = useRef<string | null>(null);
+  const currentAgentInfoRef = useRef<{ agentId?: string; hasContent: boolean }>({ hasContent: false });
 
   /* auto-scroll */
   useEffect(() => {
@@ -107,6 +109,8 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(functi
       actions: [],
     };
     setMessages((prev) => [...prev, assistantMsg]);
+    currentAssistantIdRef.current = assistantId;
+    currentAgentInfoRef.current = { hasContent: false };
     setIsStreaming(true);
 
     const controller = new AbortController();
@@ -162,29 +166,48 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(functi
           const type = event.type as string;
 
           if (type === "agent_start") {
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === assistantId
-                  ? {
-                      ...m,
-                      agentId: event.agent_id as string,
-                      agentName: event.agent_name as string,
-                    }
-                  : m,
-              ),
-            );
+            const agentId = event.agent_id as string;
+            const agentName = event.agent_name as string;
+
+            if (currentAgentInfoRef.current.agentId && currentAgentInfoRef.current.hasContent) {
+              // Previous agent already produced output — create new bubble
+              const newId = generateId();
+              setMessages((prev) => [...prev, {
+                id: newId,
+                role: "assistant" as const,
+                content: "",
+                timestamp: new Date(),
+                agentId,
+                agentName,
+                actions: [],
+              }]);
+              currentAssistantIdRef.current = newId;
+              currentAgentInfoRef.current = { agentId, hasContent: false };
+            } else {
+              // First agent — update existing placeholder
+              const targetId = currentAssistantIdRef.current;
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === targetId ? { ...m, agentId, agentName } : m,
+                ),
+              );
+              currentAgentInfoRef.current = { agentId, hasContent: false };
+            }
           } else if (type === "text_delta") {
+            const targetId = currentAssistantIdRef.current;
             setMessages((prev) =>
               prev.map((m) =>
-                m.id === assistantId
+                m.id === targetId
                   ? { ...m, content: m.content + (event.content as string) }
                   : m,
               ),
             );
+            currentAgentInfoRef.current.hasContent = true;
           } else if (type === "action") {
+            const targetId = currentAssistantIdRef.current;
             setMessages((prev) =>
               prev.map((m) =>
-                m.id === assistantId
+                m.id === targetId
                   ? {
                       ...m,
                       actions: [
