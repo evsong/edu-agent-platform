@@ -316,9 +316,33 @@ class AnalyticsService:
                         ),
                     },
                 ])
+                if not teaching_suggestions:
+                    # LLM returned empty — generate structured fallback
+                    weak_names = [e["kp_name"] for e in top_errors[:3]]
+                    teaching_suggestions = (
+                        f"## 教学优化建议\n\n"
+                        f"基于班级学情数据分析，以下知识点需要重点关注：\n\n"
+                        + "\n".join(
+                            f"- **{e['kp_name']}**：共 {e['error_count']} 次错误，"
+                            f"建议增加专项练习和课堂讲解"
+                            for e in top_errors[:5]
+                        )
+                        + f"\n\n建议在下次课程中重点复习 {'、'.join(weak_names)}，"
+                        f"通过课堂小测验检验学生掌握情况。"
+                    )
             except Exception:
                 logger.exception("LLM call failed for report generation")
-                teaching_suggestions = "Unable to generate suggestions at this time."
+                # Generate structured fallback from data
+                weak_names = [e["kp_name"] for e in top_errors[:3]]
+                teaching_suggestions = (
+                    f"## 教学优化建议\n\n"
+                    f"以下知识点错误率较高，需要重点关注：\n\n"
+                    + "\n".join(
+                        f"- **{e['kp_name']}**：共 {e['error_count']} 次错误"
+                        for e in top_errors[:5]
+                    )
+                    + f"\n\n建议在下次课程中重点复习 {'、'.join(weak_names)}。"
+                )
 
         return {
             "top_errors": top_errors,

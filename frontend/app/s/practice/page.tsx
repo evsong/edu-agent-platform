@@ -140,10 +140,16 @@ function normalizeExercise(
 ): Exercise | null {
   const ex = resp.exercise ?? resp;
   if (!ex.question || !ex.options) return null;
+  // API returns options as object {"A":"text",...}, frontend expects array [{key,text},...]
+  const rawOpts = ex.options;
+  const options = Array.isArray(rawOpts)
+    ? rawOpts
+    : Object.entries(rawOpts).map(([key, text]) => ({ key, text: String(text) }));
+
   return {
     id: ex.id ?? `api-${Date.now()}`,
     question: ex.question,
-    options: ex.options,
+    options,
     correct_answer: ex.correct_answer ?? "",
     explanation: ex.explanation ?? "",
     knowledge_point: ex.knowledge_point ?? "",
