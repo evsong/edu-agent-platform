@@ -69,18 +69,12 @@ export default function LandingPage() {
             >
               架构
             </a>
-            <a
-              href="#demo"
+            <Link
+              href="/embed/demo"
               className="text-sm font-medium text-ink-text-muted transition-colors hover:text-ink-primary"
             >
-              演示
-            </a>
-            <a
-              href="#docs"
-              className="text-sm font-medium text-ink-text-muted transition-colors hover:text-ink-primary"
-            >
-              文档
-            </a>
+              嵌入演示
+            </Link>
           </div>
 
           {/* Auth Buttons */}
@@ -150,22 +144,20 @@ export default function LandingPage() {
               variants={fadeUp}
               custom={3}
             >
-              <a
-                href="#demo"
+              <Link
+                href="/login"
                 className="inline-flex h-12 items-center gap-2 rounded-xl bg-ink-primary px-6 text-base font-semibold text-white shadow-lg shadow-ink-primary/25 transition-all hover:bg-ink-primary-dark hover:shadow-xl hover:shadow-ink-primary/30"
               >
-                <i className="ri-play-circle-line text-xl" />
-                观看演示
-              </a>
-              <a
-                href="https://github.com"
-                target="_blank"
-                rel="noopener noreferrer"
+                <i className="ri-login-box-line text-xl" />
+                登录平台
+              </Link>
+              <Link
+                href="/register"
                 className="inline-flex h-12 items-center gap-2 rounded-xl border border-ink-border bg-white px-6 text-base font-semibold text-ink-text transition-all hover:border-ink-primary/30 hover:bg-ink-primary-lighter"
               >
-                <i className="ri-github-fill text-xl" />
-                查看源码
-              </a>
+                <i className="ri-user-add-line text-xl" />
+                免费注册
+              </Link>
             </motion.div>
           </div>
         </section>
@@ -274,7 +266,7 @@ export default function LandingPage() {
               </span>
             </div>
             <p className="text-sm text-ink-text-light">
-              A25 参赛作品 &middot; 可嵌入式跨课程 AI Agent 通用架构平台
+              可嵌入式跨课程 AI Agent 通用架构平台
             </p>
           </div>
         </div>

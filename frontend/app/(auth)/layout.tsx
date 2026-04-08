@@ -23,7 +23,7 @@ export default function AuthLayout({
       </div>
 
       <p className="mt-6 text-xs text-ink-text-light">
-        A25 &middot; 可嵌入式跨课程 AI Agent 通用架构平台
+        可嵌入式跨课程 AI Agent 通用架构平台
       </p>
     </div>
   );
