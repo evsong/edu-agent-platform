@@ -237,12 +237,12 @@ export default function DashboardPage() {
         />
         <StatCard
           title="预警学生"
-          value={warningData.length || stats.warning_count}
+          value={warningData.length}
           icon="ri-alarm-warning-line"
           color="error"
           extra={
             <div className="mt-2 flex -space-x-1.5">
-              {(warningData.length > 0 ? warningData.slice(0, 3).map((w) => w.avatar || w.name?.[0] || "?") : stats.warning_avatars.slice(0, 3)).map((a, i) => (
+              {warningData.slice(0, 3).map((w) => w.avatar || w.name?.[0] || "?").map((a, i) => (
                 <div
                   key={i}
                   className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-ink-error-light text-[8px] font-bold text-ink-error"
@@ -250,9 +250,9 @@ export default function DashboardPage() {
                   {typeof a === "string" ? a.charAt(0) : "?"}
                 </div>
               ))}
-              {(warningData.length || stats.warning_count) > 3 && (
+              {warningData.length > 3 && (
                 <div className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-ink-surface text-[8px] font-bold text-ink-text-light">
-                  +{(warningData.length || stats.warning_count) - 3}
+                  +{warningData.length - 3}
                 </div>
               )}
             </div>
