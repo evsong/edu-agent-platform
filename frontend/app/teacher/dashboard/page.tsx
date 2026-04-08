@@ -172,7 +172,14 @@ export default function DashboardPage() {
       const all = await Promise.all(
         courses.map((c) => fetchWarnings(c.id).catch(() => [])),
       );
-      return all.flat();
+      // Deduplicate by student ID (same student may appear in multiple courses)
+      const flat = all.flat();
+      const seen = new Set<string>();
+      return flat.filter((w) => {
+        if (seen.has(w.id)) return false;
+        seen.add(w.id);
+        return true;
+      });
     },
     enabled: !!courses?.length,
   });
@@ -283,7 +290,7 @@ export default function DashboardPage() {
             <BarChart
               data={masteryData}
               layout="vertical"
-              margin={{ top: 0, right: 20, bottom: 0, left: 0 }}
+              margin={{ top: 0, right: 20, bottom: 0, left: 20 }}
               barSize={16}
             >
               <CartesianGrid
@@ -301,8 +308,8 @@ export default function DashboardPage() {
               <YAxis
                 type="category"
                 dataKey="name"
-                width={70}
-                tick={{ fontSize: 12, fill: "#6B7280" }}
+                width={100}
+                tick={{ fontSize: 11, fill: "#6B7280" }}
                 axisLine={false}
                 tickLine={false}
               />
