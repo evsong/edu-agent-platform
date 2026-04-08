@@ -160,9 +160,15 @@ export default function DashboardPage() {
   });
 
   const { data: warnings } = useQuery({
-    queryKey: ["warnings", firstCourseId],
-    queryFn: () => fetchWarnings(firstCourseId),
-    enabled: !!firstCourseId,
+    queryKey: ["dashboard-warnings", courses?.map((c) => c.id)],
+    queryFn: async () => {
+      if (!courses?.length) return [];
+      const all = await Promise.all(
+        courses.map((c) => fetchWarnings(c.id).catch(() => [])),
+      );
+      return all.flat();
+    },
+    enabled: !!courses?.length,
   });
 
   const stats = overview ?? {
