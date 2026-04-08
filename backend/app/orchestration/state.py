@@ -7,6 +7,11 @@ from typing import Annotated, Optional, TypedDict
 from langgraph.graph import add_messages
 
 
+def _append_responses(existing: list, new: list) -> list:
+    """Reducer: append new agent responses to existing list."""
+    return (existing or []) + (new or [])
+
+
 class DirectorState(TypedDict):
     """State for the LangGraph Director Graph.
 
@@ -40,4 +45,4 @@ class DirectorState(TypedDict):
     turn_count: int
     max_turns: int
     should_end: bool
-    agent_responses: list
+    agent_responses: Annotated[list, _append_responses]
