@@ -47,9 +47,9 @@ async def upload_document(
             with open(pdf_path, "wb") as f:
                 f.write(raw_bytes)
 
-            # Convert PDF to images (max 50 pages for safety)
+            # Convert PDF to images (max 20 pages for demo, 150 DPI for speed)
             subprocess.run(
-                ["pdftoppm", "-png", "-r", "200", "-l", "50", pdf_path, os.path.join(tmpdir, "page")],
+                ["pdftoppm", "-png", "-r", "150", "-l", "20", pdf_path, os.path.join(tmpdir, "page")],
                 check=True, timeout=120,
             )
 
