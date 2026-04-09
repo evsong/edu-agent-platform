@@ -82,7 +82,7 @@ class AnalyticsService:
 
         bkt_states: dict[str, dict] = {}
         for kp in kps:
-            bkt_states[str(kp.id)] = {**DEFAULT_BKT_PARAMS}
+            bkt_states[str(kp.id)] = {**DEFAULT_BKT_PARAMS, "name": kp.name}
 
         profile = StudentProfile(
             user_id=user_id,
@@ -491,6 +491,7 @@ class AnalyticsService:
                 "knowledge_point_id": str(selected.knowledge_point_id) if selected.knowledge_point_id else None,
                 "question": selected.question,
                 "options": selected.options,
+                "correct_answer": selected.answer,
                 "difficulty": selected.difficulty,
                 "explanation": selected.explanation,
                 "source": "database",

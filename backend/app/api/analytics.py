@@ -8,6 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy import select
+
 from app.database import get_db
 from app.services.analytics import AnalyticsService
 from app.services.llm import LLMClient
@@ -96,10 +98,24 @@ async def get_profile(
     """Return a student's BKT profile for a specific course."""
     svc = _get_service()
     profile = await svc.get_profile(db, user_id, course_id)
+
+    # Enrich bkt_states with KP names if missing
+    bkt_states = profile.bkt_states or {}
+    needs_names = any("name" not in v for v in bkt_states.values() if isinstance(v, dict))
+    if needs_names:
+        from app.models.knowledge_point import KnowledgePoint as KPModel
+        kp_result = await db.execute(
+            select(KPModel).where(KPModel.course_id == course_id)
+        )
+        kp_map = {str(kp.id): kp.name for kp in kp_result.scalars().all()}
+        for kp_id, params in bkt_states.items():
+            if isinstance(params, dict) and "name" not in params:
+                params["name"] = kp_map.get(kp_id, kp_id)
+
     return {
         "user_id": str(profile.user_id),
         "course_id": str(profile.course_id),
-        "bkt_states": profile.bkt_states,
+        "bkt_states": bkt_states,
         "overall_mastery": profile.overall_mastery,
         "risk_level": profile.risk_level,
         "last_active": profile.last_active.isoformat() if profile.last_active else None,

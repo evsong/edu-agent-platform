@@ -31,8 +31,8 @@ const studentTabs = [
   },
   {
     href: "/s/practice",
-    icon: "ri-lightning-line",
-    activeIcon: "ri-lightning-fill",
+    icon: "ri-pencil-ruler-2-line",
+    activeIcon: "ri-pencil-ruler-2-fill",
     label: "练习",
   },
   {
