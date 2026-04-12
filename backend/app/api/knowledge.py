@@ -1,7 +1,5 @@
 """Knowledge API — document upload, RAG search, and knowledge graph endpoints."""
 
-import asyncio
-import uuid as uuid_mod
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from app.services.knowledge import KnowledgeService
@@ -35,78 +33,30 @@ async def upload_document(
     filename = file.filename or "untitled.txt"
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "txt"
 
-    if ext == "pdf":
-        # PDF: async processing with DeepSeek-OCR — return task_id immediately
-        task_id = str(uuid_mod.uuid4())
-        _upload_tasks[task_id] = {"status": "processing", "progress": "0/?", "course_id": course_id, "filename": filename}
+    # Formats supported by markitdown
+    MARKITDOWN_EXTS = {"pdf", "docx", "doc", "pptx", "ppt", "xlsx", "xls",
+                       "csv", "html", "htm", "epub", "ipynb", "msg", "json", "xml", "rtf"}
 
-        async def _process_pdf_background(task_id: str, raw: bytes, cid: str, fname: str):
-            import tempfile, os, subprocess, base64, httpx, logging
-            logger = logging.getLogger(__name__)
-            OLLAMA_URL = "http://host.docker.internal:11434"
-
-            try:
-                with tempfile.TemporaryDirectory() as tmpdir:
-                    pdf_path = os.path.join(tmpdir, "input.pdf")
-                    with open(pdf_path, "wb") as f:
-                        f.write(raw)
-
-                    subprocess.run(
-                        ["pdftoppm", "-png", "-r", "150", "-l", "30", pdf_path, os.path.join(tmpdir, "page")],
-                        check=True, timeout=120,
-                    )
-                    page_images = sorted([os.path.join(tmpdir, f) for f in os.listdir(tmpdir) if f.startswith("page") and f.endswith(".png")])
-                    total = len(page_images)
-                    _upload_tasks[task_id]["progress"] = f"0/{total}"
-                    logger.info(f"PDF task {task_id}: {total} pages to OCR")
-
-                    all_text = []
-                    async with httpx.AsyncClient(timeout=120.0) as client:
-                        for i, img_path in enumerate(page_images):
-                            with open(img_path, "rb") as img_f:
-                                img_b64 = base64.b64encode(img_f.read()).decode("utf-8")
-                            try:
-                                resp = await client.post(f"{OLLAMA_URL}/api/generate", json={
-                                    "model": "deepseek-ocr",
-                                    "prompt": "Convert this document page to markdown. Preserve all text, headings, formulas, and structure.",
-                                    "images": [img_b64], "stream": False,
-                                })
-                                if resp.status_code == 200:
-                                    page_text = resp.json().get("response", "")
-                                    all_text.append(f"<!-- Page {i+1} -->\n{page_text}")
-                                    logger.info(f"PDF task {task_id}: OCR page {i+1}/{total} done ({len(page_text)} chars)")
-                            except Exception as e:
-                                logger.warning(f"PDF task {task_id}: page {i+1} error: {e}")
-                            _upload_tasks[task_id]["progress"] = f"{i+1}/{total}"
-
-                    content = "\n\n".join(all_text)
-                    if content.strip():
-                        svc = _get_service()
-                        result = await svc.upload_document(cid, fname, content)
-                        _upload_tasks[task_id].update({"status": "completed", **result})
-                    else:
-                        _upload_tasks[task_id].update({"status": "completed", "chunk_count": 0, "message": "OCR 未提取到文字"})
-            except Exception as e:
-                logger.error(f"PDF task {task_id} failed: {e}")
-                _upload_tasks[task_id].update({"status": "error", "message": str(e)})
-
-        asyncio.create_task(_process_pdf_background(task_id, raw_bytes, course_id, filename))
-        return {"task_id": task_id, "status": "processing", "message": f"PDF 正在后台处理（DeepSeek-OCR），请通过 /api/knowledge/upload-status/{task_id} 查询进度"}
-
-    elif ext in ("docx", "doc", "pptx", "ppt"):
+    if ext in MARKITDOWN_EXTS:
+        import tempfile, os, subprocess, logging
+        logger = logging.getLogger(__name__)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}") as tmp:
+            tmp.write(raw_bytes)
+            tmp_path = tmp.name
         try:
-            from unstructured.partition.auto import partition
-            import tempfile, os
-            with tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}") as tmp:
-                tmp.write(raw_bytes)
-                tmp_path = tmp.name
-            try:
-                elements = partition(filename=tmp_path)
-                content = "\n\n".join(str(el) for el in elements if str(el).strip())
-            finally:
-                os.unlink(tmp_path)
-        except Exception:
+            result = subprocess.run(
+                ["markitdown", tmp_path],
+                capture_output=True, text=True, timeout=120,
+            )
+            content = result.stdout.strip() if result.returncode == 0 else ""
+            if not content:
+                logger.warning(f"markitdown failed for {filename}: {result.stderr}")
+                content = raw_bytes.decode("utf-8", errors="ignore")
+        except Exception as e:
+            logger.warning(f"markitdown error for {filename}: {e}")
             content = raw_bytes.decode("utf-8", errors="ignore")
+        finally:
+            os.unlink(tmp_path)
     else:
         content = raw_bytes.decode("utf-8")
 

@@ -236,13 +236,6 @@ export default function PracticePage() {
       queryClient.invalidateQueries({
         queryKey: ["practice-profile", user?.id],
       });
-
-      // After delay, fetch next exercise
-      setTimeout(() => {
-        setShowResult(false);
-        setLastResult(null);
-        fetchNextExercise();
-      }, 2500);
     },
     onError: () => {
       // API failed — just increment count, next exercise will be fetched on retry
@@ -258,6 +251,12 @@ export default function PracticePage() {
     },
     [user?.id, answerMutation],
   );
+
+  const handleNext = useCallback(() => {
+    setShowResult(false);
+    setLastResult(null);
+    fetchNextExercise();
+  }, [fetchNextExercise]);
 
   const currentKP = knowledgePoints.find(
     (kp) => kp.name === currentExercise?.knowledge_point,
@@ -334,6 +333,7 @@ export default function PracticePage() {
             lastResult?.explanation || currentExercise.explanation
           }
           onSubmit={handleSubmitAnswer}
+          onNext={showResult ? handleNext : undefined}
           current={answeredCount + 1}
           total={totalExercises}
         />

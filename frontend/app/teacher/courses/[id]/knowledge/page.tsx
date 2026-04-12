@@ -172,7 +172,7 @@ export default function KnowledgeBasePage({
       <input
         ref={fileInputRef}
         type="file"
-        accept=".pdf,.docx,.doc,.pptx,.ppt,.txt,.md"
+        accept=".pdf,.docx,.doc,.pptx,.ppt,.txt,.md,.xlsx,.xls,.html,.htm,.csv,.json,.xml,.rtf,.epub"
         className="hidden"
         onChange={(e) => { if (e.target.files?.length) { handleFiles(e.target.files); e.target.value = ""; } }}
       />

@@ -11,6 +11,7 @@ interface PracticeCardProps {
   correctAnswer: string;
   explanation: string;
   onSubmit: (answer: string) => void;
+  onNext?: () => void;
   current: number;
   total: number;
 }
@@ -21,6 +22,7 @@ export default function PracticeCard({
   correctAnswer,
   explanation,
   onSubmit,
+  onNext,
   current,
   total,
 }: PracticeCardProps) {
@@ -152,6 +154,15 @@ export default function PracticeCard({
             <p className="text-sm text-ink-text leading-relaxed">
               {explanation}
             </p>
+            {onNext && (
+              <Button
+                onClick={onNext}
+                className="mt-3 w-full bg-ink-primary hover:bg-ink-primary-dark text-white h-10"
+              >
+                <i className="ri-arrow-right-line mr-2" />
+                下一题
+              </Button>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
