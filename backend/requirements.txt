@@ -1,4 +1,4 @@
-setuptools>=70.0
+setuptools==75.8.2
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 sqlalchemy[asyncio]==2.0.36
