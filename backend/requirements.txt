@@ -20,3 +20,4 @@ openai==1.58.1
 httpx==0.28.1
 python-multipart==0.0.20
 markitdown[all]==0.1.5
+setuptools>=70.0
