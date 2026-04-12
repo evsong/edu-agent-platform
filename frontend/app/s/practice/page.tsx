@@ -188,6 +188,8 @@ export default function PracticePage() {
     },
     enabled: !!user?.id,
     retry: false,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
   });
 
   /* ── Fetch mastery profile ── */
