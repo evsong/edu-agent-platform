@@ -107,7 +107,11 @@ async def get_profile(
         kp_result = await db.execute(
             select(KPModel).where(KPModel.course_id == course_id)
         )
-        kp_map = {str(kp.id): kp.name for kp in kp_result.scalars().all()}
+        kp_map = {}
+        for kp in kp_result.scalars().all():
+            kp_map[str(kp.id)] = kp.name
+            if kp.external_id:
+                kp_map[kp.external_id] = kp.name
         for kp_id, params in bkt_states.items():
             if isinstance(params, dict) and "name" not in params:
                 params["name"] = kp_map.get(kp_id, kp_id)
