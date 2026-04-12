@@ -206,7 +206,7 @@ export default function KnowledgeBasePage({
               </button>
             </p>
             <p className="mt-1 text-xs text-ink-text-light">
-              支持 PDF, DOCX, TXT, MD 格式，单文件最大 50MB
+              支持 PDF, DOCX, PPTX, XLSX, CSV, HTML, EPUB 等格式，单文件最大 50MB
             </p>
           </div>
         </div>

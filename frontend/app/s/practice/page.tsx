@@ -203,12 +203,18 @@ export default function PracticePage() {
     enabled: !!user?.id,
   });
 
-  // Derive knowledge points from profile
+  // Derive knowledge points from profile, deduplicate by name (keep highest mastery)
   const knowledgePoints: KnowledgePoint[] = profile?.bkt_states
-    ? Object.entries(profile.bkt_states).map(([key, val]) => ({
-        name: val.name || key,
-        mastery: val.mastery ?? 0,
-      }))
+    ? Object.values(
+        Object.entries(profile.bkt_states).reduce<Record<string, KnowledgePoint>>((acc, [key, val]) => {
+          const name = val.name || key;
+          const mastery = val.mastery ?? 0;
+          if (!acc[name] || mastery > acc[name].mastery) {
+            acc[name] = { name, mastery };
+          }
+          return acc;
+        }, {}),
+      )
     : [];
 
   // Current exercise: prefer API, show loading when unavailable

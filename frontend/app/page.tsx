@@ -181,7 +181,7 @@ export default function LandingPage() {
                   className="group relative rounded-2xl border border-ink-border bg-white p-6 transition-all hover:border-ink-primary/20 hover:shadow-lg hover:shadow-ink-primary/5"
                   initial="hidden"
                   whileInView="visible"
-                  viewport={{ once: true, margin: "-60px" }}
+                  viewport={{ once: true, amount: 0.1 }}
                   variants={fadeUp}
                   custom={i}
                 >
