@@ -13,6 +13,7 @@ export default function UserMenu() {
   const ref = useRef<HTMLDivElement>(null);
 
   const isTeacher = pathname.startsWith("/teacher");
+  const isActualTeacher = user?.role === "teacher" || user?.role === "admin";
 
   const displayName = user?.name ?? (isTeacher ? "教师" : "学生");
   const displayEmail = user?.email ?? (isTeacher ? "teacher@edu.cn" : "student@edu.cn");
@@ -61,16 +62,18 @@ export default function UserMenu() {
 
           {/* Menu items */}
           <div className="py-1">
-            <button
-              className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-ink-text transition-colors hover:bg-ink-surface cursor-pointer"
-              onClick={() => {
-                setOpen(false);
-                router.push(switchPath);
-              }}
-            >
-              <i className="ri-swap-line text-base text-ink-text-light" />
-              <span>{switchLabel}</span>
-            </button>
+            {isActualTeacher && (
+              <button
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-ink-text transition-colors hover:bg-ink-surface cursor-pointer"
+                onClick={() => {
+                  setOpen(false);
+                  router.push(switchPath);
+                }}
+              >
+                <i className="ri-swap-line text-base text-ink-text-light" />
+                <span>{switchLabel}</span>
+              </button>
+            )}
             <button
               className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-ink-text transition-colors hover:bg-ink-surface cursor-pointer"
               onClick={() => {
@@ -78,8 +81,8 @@ export default function UserMenu() {
                 router.push(settingsPath);
               }}
             >
-              <i className="ri-settings-3-line text-base text-ink-text-light" />
-              <span>设置</span>
+              <i className={cn("text-base text-ink-text-light", isTeacher ? "ri-settings-3-line" : "ri-user-line")} />
+              <span>{isTeacher ? "设置" : "我的"}</span>
             </button>
           </div>
 

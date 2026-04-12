@@ -175,6 +175,15 @@ export async function fetchGradingDetail(submissionId: string): Promise<GradingD
       rawAnnotations = res.annotations;
     } else if (res.annotations.annotations && Array.isArray(res.annotations.annotations)) {
       rawAnnotations = res.annotations.annotations;
+    } else if (res.annotations.feedback) {
+      // Seed data format: {auto_graded: true, feedback: "..."}
+      rawAnnotations = [{
+        paragraph_id: "P1",
+        severity: "info",
+        comment: res.annotations.feedback,
+        correction: "",
+        knowledge_point: "",
+      }];
     }
   }
 

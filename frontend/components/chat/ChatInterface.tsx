@@ -58,7 +58,18 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(functi
   courseId,
   className,
 }: ChatInterfaceProps, ref) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const chatStorageKey = `eduagent-chat-${courseId}`;
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const saved = localStorage.getItem(chatStorageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved) as ChatMessage[];
+        return parsed.map((m) => ({ ...m, timestamp: new Date(m.timestamp) }));
+      }
+    } catch { /* ignore */ }
+    return [];
+  });
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,6 +79,13 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(functi
   const abortRef = useRef<AbortController | null>(null);
   const currentAssistantIdRef = useRef<string | null>(null);
   const currentAgentInfoRef = useRef<{ agentId?: string; hasContent: boolean }>({ hasContent: false });
+
+  /* persist chat history */
+  useEffect(() => {
+    if (messages.length > 0) {
+      try { localStorage.setItem(chatStorageKey, JSON.stringify(messages.slice(-50))); } catch { /* ignore */ }
+    }
+  }, [messages, chatStorageKey]);
 
   /* auto-scroll */
   useEffect(() => {
@@ -115,6 +133,10 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(functi
 
     const controller = new AbortController();
     abortRef.current = controller;
+    let receivedContent = false;
+    const timeout = setTimeout(() => {
+      if (!receivedContent) controller.abort();
+    }, 30000);
 
     try {
       const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
@@ -194,6 +216,7 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(functi
               currentAgentInfoRef.current = { agentId, hasContent: false };
             }
           } else if (type === "text_delta") {
+            receivedContent = true;
             const targetId = currentAssistantIdRef.current;
             setMessages((prev) =>
               prev.map((m) =>
@@ -231,7 +254,19 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(functi
         }
       }
     } catch (err: unknown) {
-      if ((err as Error).name === "AbortError") return;
+      if ((err as Error).name === "AbortError") {
+        // If aborted due to timeout, show a helpful message
+        if (!receivedContent) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId && !m.content
+                ? { ...m, content: "AI 响应超时，请稍后重试。可能是后端 LLM 服务暂时不可用。" }
+                : m,
+            ),
+          );
+        }
+        return;
+      }
       const message =
         err instanceof Error ? err.message : "Failed to connect";
       setError(message);
@@ -242,6 +277,7 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(functi
         return prev;
       });
     } finally {
+      clearTimeout(timeout);
       setIsStreaming(false);
       abortRef.current = null;
     }

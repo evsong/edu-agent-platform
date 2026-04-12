@@ -86,15 +86,14 @@ const mockProfile: ProfileData = {
     { name: "三角恒等", mastery: 0.76 },
     { name: "概率统计", mastery: 0.52 },
   ],
-  mastery_history: [
-    { date: "03/31", mastery: 52 },
-    { date: "04/01", mastery: 55 },
-    { date: "04/02", mastery: 54 },
-    { date: "04/03", mastery: 58 },
-    { date: "04/04", mastery: 62 },
-    { date: "04/05", mastery: 64 },
-    { date: "04/06", mastery: 68 },
-  ],
+  mastery_history: Array.from({ length: 7 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - 6 + i);
+    return {
+      date: `${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}`,
+      mastery: Math.round(52 + i * 2.5 + Math.sin(i) * 3),
+    };
+  }),
   stats: {
     total_interactions: 347,
     practice_sessions: 28,

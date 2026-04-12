@@ -14,7 +14,7 @@ interface Notification {
 const studentNotifications: Notification[] = [
   {
     id: "s1",
-    text: "你的第三次作业已批改完成，得分85分",
+    text: "你的第三次作业已批改完成，得分92分",
     time: "2 分钟前",
     read: false,
   },
