@@ -1,3 +1,4 @@
+setuptools>=70.0
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 sqlalchemy[asyncio]==2.0.36
@@ -20,4 +21,3 @@ openai==1.58.1
 httpx==0.28.1
 python-multipart==0.0.20
 markitdown[all]==0.1.5
-setuptools>=70.0
