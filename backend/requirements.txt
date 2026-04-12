@@ -19,4 +19,4 @@ langgraph==0.2.60
 openai==1.58.1
 httpx==0.28.1
 python-multipart==0.0.20
-unstructured[all-docs]==0.16.11
+markitdown[all]==0.1.5
