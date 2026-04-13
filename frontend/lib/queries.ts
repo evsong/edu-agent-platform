@@ -36,6 +36,7 @@ export interface GraphNode {
   course: string;
   color?: string;
   val?: number;
+  difficulty?: number;
 }
 
 export interface GraphLink {
