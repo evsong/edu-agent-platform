@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { apiFetch } from "@/lib/api";
 import { fetchCourses } from "@/lib/queries";
 import type { Course } from "@/lib/queries";
+import { cn } from "@/lib/utils";
 
 const mockCourses: Course[] = [
   {
@@ -69,6 +71,7 @@ function formatDate(iso: string): string {
 
 export default function CoursesPage() {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const { data: courses } = useQuery({
     queryKey: ["courses"],
     queryFn: fetchCourses,
@@ -79,15 +82,41 @@ export default function CoursesPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
+  const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
+
+  // Load all available students for the picker
+  const { data: availableStudents } = useQuery({
+    queryKey: ["available-students"],
+    queryFn: async () => {
+      try {
+        const res = await apiFetch<{ students: Array<{ id: string; name: string; email?: string }> }>(
+          "/api/courses/available-students",
+        );
+        return res.students || [];
+      } catch {
+        return [];
+      }
+    },
+    enabled: showCreate,
+  });
+  const allStudents = availableStudents || [];
 
   const createMutation = useMutation({
-    mutationFn: (data: { name: string; description: string }) =>
-      apiFetch("/api/courses", { method: "POST", body: JSON.stringify(data) }),
-    onSuccess: () => {
+    mutationFn: (data: { name: string; description: string; student_ids: string[] }) =>
+      apiFetch<{ id: string; name: string }>("/api/courses", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["courses"] });
       setShowCreate(false);
       setNewName("");
       setNewDesc("");
+      setSelectedStudentIds(new Set());
+      // Navigate directly to the new course's knowledge page for textbook upload
+      if (result?.id) {
+        router.push(`/teacher/courses/${result.id}/knowledge`);
+      }
     },
   });
 
@@ -121,7 +150,7 @@ export default function CoursesPage() {
               <input
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
-                placeholder="高等数学"
+                placeholder="软件工程"
                 className="mt-1 w-full rounded-lg border border-ink-border px-3 py-1.5 text-sm"
               />
             </div>
@@ -132,21 +161,94 @@ export default function CoursesPage() {
               <input
                 value={newDesc}
                 onChange={(e) => setNewDesc(e.target.value)}
-                placeholder="微积分、线性代数..."
+                placeholder="软件生命周期、需求工程、敏捷开发..."
                 className="mt-1 w-full rounded-lg border border-ink-border px-3 py-1.5 text-sm"
               />
             </div>
           </div>
-          <button
-            onClick={() =>
-              newName &&
-              createMutation.mutate({ name: newName, description: newDesc })
-            }
-            disabled={!newName || createMutation.isPending}
-            className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-lg bg-ink-primary px-4 text-xs font-medium text-white hover:bg-ink-primary-dark disabled:opacity-50"
-          >
-            {createMutation.isPending ? "创建中..." : "创建课程"}
-          </button>
+
+          {/* Student Enrollment Picker */}
+          <div className="mt-4">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-ink-text-light">
+                选课学生 ({selectedStudentIds.size}/{allStudents.length})
+              </label>
+              <div className="flex gap-2 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setSelectedStudentIds(new Set(allStudents.map((s) => s.id)))}
+                  className="text-ink-primary hover:underline"
+                >
+                  全选
+                </button>
+                <span className="text-ink-text-light">|</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedStudentIds(new Set())}
+                  className="text-ink-text-muted hover:text-ink-text"
+                >
+                  清空
+                </button>
+              </div>
+            </div>
+            {allStudents.length > 0 ? (
+              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+                {allStudents.map((s) => {
+                  const checked = selectedStudentIds.has(s.id);
+                  return (
+                    <label
+                      key={s.id}
+                      className={cn(
+                        "flex items-center gap-2 rounded-lg border px-3 py-2 text-sm cursor-pointer transition-colors",
+                        checked
+                          ? "border-ink-primary bg-ink-primary-lighter text-ink-primary"
+                          : "border-ink-border bg-white text-ink-text hover:bg-ink-surface",
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => {
+                          setSelectedStudentIds((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(s.id)) next.delete(s.id);
+                            else next.add(s.id);
+                            return next;
+                          });
+                        }}
+                        className="accent-ink-primary"
+                      />
+                      <span className="truncate">{s.name}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="mt-2 text-xs text-ink-text-muted">
+                正在加载学生列表...
+              </p>
+            )}
+          </div>
+
+          <div className="mt-4 flex gap-2">
+            <button
+              onClick={() =>
+                newName &&
+                createMutation.mutate({
+                  name: newName,
+                  description: newDesc,
+                  student_ids: Array.from(selectedStudentIds),
+                })
+              }
+              disabled={!newName || createMutation.isPending}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-ink-primary px-4 text-xs font-medium text-white hover:bg-ink-primary-dark disabled:opacity-50"
+            >
+              {createMutation.isPending ? "创建中..." : "创建课程并上传教材"}
+            </button>
+            <p className="text-xs text-ink-text-muted self-center">
+              创建后将自动跳转到知识库，引导上传第一本教材
+            </p>
+          </div>
         </div>
       )}
 

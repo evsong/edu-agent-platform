@@ -23,6 +23,11 @@ router = APIRouter(prefix="/api/courses", tags=["courses"])
 class CourseCreatePayload(BaseModel):
     name: str
     description: str = ""
+    student_ids: list[str] = []
+
+
+class EnrollStudentsPayload(BaseModel):
+    student_ids: list[str]
 
 
 class CourseUpdatePayload(BaseModel):
@@ -140,10 +145,76 @@ async def create_course(
     db.add(course)
     await db.flush()
     await db.refresh(course)
+
+    # Enroll initial students if provided
+    enrolled_count = 0
+    for sid in payload.student_ids:
+        try:
+            student_uuid = uuid.UUID(sid)
+        except ValueError:
+            continue
+        enrollment = CourseEnrollment(
+            course_id=course.id,
+            user_id=student_uuid,
+        )
+        db.add(enrollment)
+        enrolled_count += 1
+    await db.flush()
+
     return {
         "id": str(course.id),
         "name": course.name,
         "description": course.description,
+        "enrolled_students": enrolled_count,
+    }
+
+
+@router.post("/{course_id}/enroll")
+async def enroll_students(
+    course_id: uuid.UUID,
+    payload: EnrollStudentsPayload,
+    db: AsyncSession = Depends(get_db),
+):
+    """Enroll additional students into a course. Ignores existing enrollments."""
+    result = await db.execute(select(Course).where(Course.id == course_id))
+    course = result.scalar_one_or_none()
+    if course is None:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    # Existing enrollments
+    existing = await db.execute(
+        select(CourseEnrollment.user_id).where(
+            CourseEnrollment.course_id == course_id,
+        )
+    )
+    existing_ids = {row[0] for row in existing.fetchall()}
+
+    added = 0
+    for sid in payload.student_ids:
+        try:
+            student_uuid = uuid.UUID(sid)
+        except ValueError:
+            continue
+        if student_uuid in existing_ids:
+            continue
+        db.add(CourseEnrollment(course_id=course_id, user_id=student_uuid))
+        added += 1
+
+    return {"added": added, "already_enrolled": len(existing_ids)}
+
+
+@router.get("/available-students")
+async def list_available_students(db: AsyncSession = Depends(get_db)):
+    """List all students in the system (for course creation picker)."""
+    result = await db.execute(
+        select(User).where(User.role == "student").order_by(User.name)
+    )
+    users = result.scalars().all()
+    return {
+        "students": [
+            {"id": str(u.id), "name": u.name, "email": u.email}
+            for u in users
+        ]
     }
 
 
