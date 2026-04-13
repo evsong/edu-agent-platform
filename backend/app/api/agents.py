@@ -111,6 +111,7 @@ async def create_agent(payload: AgentConfigCreate, db: AsyncSession = Depends(ge
         temperature=payload.temperature,
         knowledge_base=payload.knowledge_base,
         grading_rules=payload.grading_rules,
+        system_prompt=payload.system_prompt,
         icon=payload.icon,
     )
     db.add(agent)
