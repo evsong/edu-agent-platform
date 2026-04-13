@@ -6,6 +6,7 @@ import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -162,6 +163,113 @@ async def list_submissions_for_assignment(
 
 
 # ── Current student's own submissions ──────────────────────────────
+
+
+class SubmitAssignmentBody(BaseModel):
+    content: str
+
+
+@router.post("/assignments/{assignment_id}/submit", tags=["submissions"])
+async def submit_assignment(
+    assignment_id: uuid.UUID,
+    payload: SubmitAssignmentBody,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a fresh student submission with the answer content.
+
+    Reuses an existing pending Submission row if one already exists for
+    this (student, assignment); otherwise inserts a new one. Status is set
+    to 'submitted' so it shows up in the teacher grading queue.
+    """
+    if current_user.role != "student":
+        raise HTTPException(status_code=403, detail="Only students can submit")
+
+    # Verify assignment exists
+    asn = await db.execute(select(Assignment).where(Assignment.id == assignment_id))
+    if asn.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+
+    # Reuse or create
+    existing = await db.execute(
+        select(Submission).where(
+            Submission.assignment_id == assignment_id,
+            Submission.student_id == current_user.id,
+        )
+    )
+    sub = existing.scalar_one_or_none()
+    if sub is None:
+        sub = Submission(
+            assignment_id=assignment_id,
+            student_id=current_user.id,
+            content=payload.content,
+            status="submitted",
+        )
+        db.add(sub)
+    else:
+        sub.content = payload.content
+        sub.status = "submitted"
+    await db.flush()
+    await db.refresh(sub)
+    return {
+        "id": str(sub.id),
+        "assignment_id": str(sub.assignment_id),
+        "status": sub.status,
+    }
+
+
+@router.get("/student/assignments", tags=["assignments"])
+async def list_student_assignments(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return every assignment in the student's enrolled courses, joined
+    with their submission row if one exists. Pending assignments (no
+    submission row yet) appear with status='pending'."""
+    if current_user.role != "student":
+        raise HTTPException(status_code=403, detail="Students only")
+
+    from app.models.course import CourseEnrollment
+
+    # Assignments in courses the student is enrolled in
+    stmt = (
+        select(
+            Assignment.id.label("assignment_id"),
+            Assignment.title.label("assignment_title"),
+            Assignment.due_date.label("due_date"),
+            Assignment.content.label("description"),
+            Course.id.label("course_id"),
+            Course.name.label("course_name"),
+            Submission.id.label("submission_id"),
+            Submission.status.label("submission_status"),
+            Submission.score.label("score"),
+            Submission.created_at.label("submitted_at"),
+        )
+        .join(Course, Assignment.course_id == Course.id)
+        .join(CourseEnrollment, CourseEnrollment.course_id == Course.id)
+        .outerjoin(
+            Submission,
+            (Submission.assignment_id == Assignment.id)
+            & (Submission.student_id == current_user.id),
+        )
+        .where(CourseEnrollment.user_id == current_user.id)
+        .order_by(Assignment.created_at.desc())
+    )
+    rows = (await db.execute(stmt)).all()
+    return [
+        {
+            "assignment_id": str(r.assignment_id),
+            "assignment_title": r.assignment_title,
+            "course_name": r.course_name,
+            "due_date": r.due_date.isoformat() if r.due_date else None,
+            "description": r.description,
+            "submission_id": str(r.submission_id) if r.submission_id else None,
+            "status": r.submission_status or "pending",
+            "score": r.score,
+            "submitted_at": r.submitted_at.isoformat() if r.submitted_at else None,
+        }
+        for r in rows
+    ]
 
 
 @router.get("/submissions/mine", tags=["submissions"])

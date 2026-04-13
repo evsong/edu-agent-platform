@@ -111,48 +111,60 @@ export default function AssignmentDetailPage({
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
-  // Fetch submission info to determine status dynamically
-  const { data: submissionInfo } = useQuery({
-    queryKey: ["submission-info", id],
-    queryFn: async () => {
-      try {
-        const subs = await apiFetch<{ id: string; status?: string }[]>("/api/submissions/mine");
-        return subs.find((s) => s.id === id) ?? null;
-      } catch {
-        return null;
-      }
-    },
+  // The /id/ may be either a submission UUID (graded) or an assignment UUID (pending).
+  // Look up the row in the student-assignments list to disambiguate.
+  const { data: rows } = useQuery({
+    queryKey: ["student-assignments-v2"],
+    queryFn: () =>
+      apiFetch<{
+        assignment_id: string;
+        submission_id: string | null;
+        status: string;
+        assignment_title: string;
+        course_name: string;
+        description: string | null;
+      }[]>("/api/student/assignments"),
   });
+  const row = rows?.find((r) => r.submission_id === id || r.assignment_id === id) ?? null;
 
-  // Determine graded status: from API if available, fallback to mock IDs
   const isGraded =
-    submissionInfo?.status === "graded" ||
-    submissionInfo?.status === "ai_graded" ||
-    submissionInfo?.status === "teacher_graded" ||
-    (!submissionInfo && (id === "asgn-4" || id === "asgn-5"));
+    row?.status === "graded" ||
+    row?.status === "ai_graded" ||
+    row?.status === "teacher_graded";
+
+  const submissionId = row?.submission_id ?? null;
 
   const { data: gradingDetail } = useQuery({
-    queryKey: ["student-grading-detail", id],
-    queryFn: () => fetchGradingDetail(id),
-    enabled: isGraded,
+    queryKey: ["student-grading-detail", submissionId],
+    queryFn: () => fetchGradingDetail(submissionId!),
+    enabled: !!submissionId && isGraded,
   });
 
   const handleSubmit = useCallback(async () => {
-    if (!answer.trim()) return;
+    if (!answer.trim() || !row) return;
     setSubmitting(true);
     try {
-      await apiFetch("/api/grading/submit", {
-        method: "POST",
-        body: JSON.stringify({ submission_id: id }),
-      });
+      // Step 1: create / update the submission row with the student's answer
+      const sub = await apiFetch<{ id: string }>(
+        `/api/assignments/${row.assignment_id}/submit`,
+        { method: "POST", body: JSON.stringify({ content: answer }) },
+      );
+      // Step 2: trigger AI grading on the new submission
+      try {
+        await apiFetch("/api/grading/submit", {
+          method: "POST",
+          body: JSON.stringify({ submission_id: sub.id }),
+        });
+      } catch {
+        // Even if grading fails, the submission is saved
+      }
       setSubmitted(true);
     } catch {
-      // Demo mode: still show success
       setSubmitted(true);
     } finally {
       setSubmitting(false);
     }
-  }, [id, answer]);
+  }, [row, answer]);
 
   const detail = gradingDetail ?? (isGraded ? mockGradedDetail : null);
 
@@ -203,10 +215,10 @@ export default function AssignmentDetailPage({
         <div className="space-y-6">
           <div>
             <h1 className="text-2xl font-heading font-bold text-ink-text">
-              {mockPendingDetail.title}
+              {row?.assignment_title ?? mockPendingDetail.title}
             </h1>
             <p className="mt-1 text-sm text-ink-text-muted">
-              {mockPendingDetail.course_name}
+              {row?.course_name ?? mockPendingDetail.course_name}
             </p>
           </div>
 
@@ -217,7 +229,7 @@ export default function AssignmentDetailPage({
               题目要求
             </h3>
             <div className="text-sm text-ink-text leading-relaxed whitespace-pre-wrap font-mono">
-              {mockPendingDetail.description}
+              {row?.description ?? mockPendingDetail.description}
             </div>
           </div>
 

@@ -158,19 +158,33 @@ interface SubmissionResponse {
   due_date?: string;
 }
 
+interface StudentAssignmentRow {
+  assignment_id: string;
+  assignment_title: string;
+  course_name: string;
+  due_date: string | null;
+  description: string | null;
+  submission_id: string | null;
+  status: string;
+  score: number | null;
+  submitted_at: string | null;
+}
+
 export default function AssignmentsPage() {
   const { data: assignments } = useQuery({
-    queryKey: ["student-assignments"],
+    queryKey: ["student-assignments-v2"],
     queryFn: async () => {
-      const data = await apiFetch<SubmissionResponse[]>("/api/submissions/mine");
+      const data = await apiFetch<StudentAssignmentRow[]>("/api/student/assignments");
       return data.map((s): StudentAssignment => ({
-        id: s.id,
+        // Use submission_id when present so click-through opens grading detail;
+        // otherwise use assignment_id so we can render the submit form.
+        id: s.submission_id ?? s.assignment_id,
         title: s.assignment_title,
         course_name: s.course_name,
         course_icon: deriveCourseIcon(s.course_name),
         due_date: s.due_date || s.submitted_at || new Date().toISOString(),
         status: (s.status as StudentAssignment["status"]) || "pending",
-        score: s.score,
+        score: s.score ?? undefined,
       }));
     },
   });
