@@ -140,7 +140,9 @@ export default function GradingQueuePage() {
   });
 
   const list = submissions ?? [];
-  const pendingCount = list.filter((s) => s.status === "pending").length;
+  const pendingCount = list.filter(
+    (s) => s.status === "pending" || s.status === "submitted",
+  ).length;
 
   return (
     <motion.div
@@ -160,7 +162,9 @@ export default function GradingQueuePage() {
         </div>
         <button
           onClick={() => {
-            const pendingIds = list.filter((s) => s.status === "pending").map((s) => s.id);
+            const pendingIds = list
+              .filter((s) => s.status === "pending" || s.status === "submitted")
+              .map((s) => s.id);
             if (pendingIds.length > 0) gradeMutation.mutate(pendingIds);
           }}
           disabled={gradeMutation.isPending || pendingCount === 0}
