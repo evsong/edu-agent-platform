@@ -94,7 +94,7 @@ class QAAgent(BaseAgent):
         try:
             from app.api.agents import get_active_agent
 
-            db_session = getattr(ctx, "session", None) or getattr(ctx, "db_session", None)
+            db_session = getattr(ctx, "db", None)
             if db_session is not None and ctx.course_id:
                 agent_cfg = await get_active_agent(db_session, ctx.course_id, "qa")
         except Exception:
