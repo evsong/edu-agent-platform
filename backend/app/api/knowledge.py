@@ -125,11 +125,13 @@ async def upload_document(
         raise HTTPException(status_code=500, detail=f"Failed to save upload: {e}")
 
     task_id = str(uuid.uuid4())
+    import datetime as _dt
     _upload_tasks[task_id] = {
         "status": "queued",
         "course_id": course_id,
         "filename": filename,
         "file_size": len(raw_bytes),
+        "uploaded_at": _dt.datetime.utcnow().isoformat() + "Z",
     }
 
     asyncio.create_task(_process_file_background(task_id, course_id, filename, tmp_path))
@@ -228,12 +230,14 @@ async def upload_complete(upload_id: str):
     _upload_sessions.pop(upload_id, None)
 
     # Start async processing
+    import datetime as _dt
     task_id = str(uuid.uuid4())
     _upload_tasks[task_id] = {
         "status": "queued",
         "course_id": session["course_id"],
         "filename": filename,
         "file_size": session["file_size"],
+        "uploaded_at": _dt.datetime.utcnow().isoformat() + "Z",
     }
     asyncio.create_task(_process_file_background(
         task_id, session["course_id"], filename, merged_path,
@@ -248,6 +252,34 @@ async def get_upload_status(task_id: str):
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     return {"task_id": task_id, **task}
+
+
+# ── Document List ───────────────────────────────────────────────
+
+@router.get("/docs/{course_id}")
+async def list_docs(course_id: str):
+    """List all uploaded documents for a course (from in-memory upload task log)."""
+    import datetime
+    docs = []
+    for task_id, task in _upload_tasks.items():
+        if task.get("course_id") != course_id:
+            continue
+        status_map = {
+            "completed": "indexed",
+            "error": "failed",
+        }
+        ui_status = status_map.get(task.get("status", ""), "processing")
+        docs.append({
+            "id": task.get("document_id") or task_id,
+            "filename": task.get("filename", "unknown"),
+            "size": task.get("file_size", 0),
+            "uploaded_at": task.get("uploaded_at", datetime.datetime.utcnow().isoformat() + "Z"),
+            "status": ui_status,
+            "chunk_count": task.get("chunk_count", 0),
+        })
+    # Newest first
+    docs.sort(key=lambda d: d.get("uploaded_at", ""), reverse=True)
+    return docs
 
 
 # ── RAG Search ───────────────────────────────────────────────────
