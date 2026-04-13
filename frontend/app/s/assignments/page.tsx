@@ -171,21 +171,25 @@ interface StudentAssignmentRow {
 }
 
 export default function AssignmentsPage() {
-  const { data: assignments, isPending } = useQuery({
+  const { data: assignments, isPending, isFetching } = useQuery({
     queryKey: ["student-assignments-v2"],
     queryFn: async () => {
       const data = await apiFetch<StudentAssignmentRow[]>("/api/student/assignments");
-      return data.map((s): StudentAssignment => ({
-        // Use submission_id when present so click-through opens grading detail;
-        // otherwise use assignment_id so we can render the submit form.
-        id: s.submission_id ?? s.assignment_id,
-        title: s.assignment_title,
-        course_name: s.course_name,
-        course_icon: deriveCourseIcon(s.course_name),
-        due_date: s.due_date || s.submitted_at || new Date().toISOString(),
-        status: (s.status as StudentAssignment["status"]) || "pending",
-        score: s.score ?? undefined,
-      }));
+      return data
+        // Skip rows that are missing a title so we never render an
+        // "untitled" or duplicated row during a refetch flash.
+        .filter((s) => s.assignment_title && s.assignment_title.trim().length > 0)
+        .map((s): StudentAssignment => ({
+          // Use submission_id when present so click-through opens grading detail;
+          // otherwise use assignment_id so we can render the submit form.
+          id: s.submission_id ?? s.assignment_id,
+          title: s.assignment_title,
+          course_name: s.course_name,
+          course_icon: deriveCourseIcon(s.course_name),
+          due_date: s.due_date || s.submitted_at || new Date().toISOString(),
+          status: (s.status as StudentAssignment["status"]) || "pending",
+          score: s.score ?? undefined,
+        }));
     },
   });
 
@@ -234,7 +238,7 @@ export default function AssignmentsPage() {
 
       {/* Assignment list */}
       <div className="rounded-xl border border-ink-border bg-white overflow-hidden">
-        {isPending && list.length === 0 && (
+        {(isPending || (isFetching && list.length === 0)) && (
           <div className="divide-y divide-ink-border">
             {[0, 1, 2].map((i) => (
               <div key={i} className="flex items-center gap-4 px-5 py-4">

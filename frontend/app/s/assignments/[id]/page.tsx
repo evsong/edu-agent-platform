@@ -132,7 +132,7 @@ export default function AssignmentDetailPage({
   // we've matched a row yet. If the id is a real submission and it has a
   // grading result, this resolves and lets us render review mode even if
   // the listing row hasn't loaded yet (or 404s out for unrelated reasons).
-  const { data: speculativeGrading } = useQuery({
+  const { data: speculativeGrading, isPending: gradingPending } = useQuery({
     queryKey: ["student-grading-detail", id],
     queryFn: () => fetchGradingDetail(id),
     retry: false,
@@ -146,6 +146,11 @@ export default function AssignmentDetailPage({
     row?.status === "teacher_graded";
 
   const gradingDetail = speculativeGrading;
+
+  // While we don't yet know whether the URL points at a graded submission
+  // or a fresh assignment, render a skeleton instead of the mock pending
+  // template — otherwise the user sees a brief flash of mock content.
+  const stillResolvingRoute = gradingPending && !rows;
 
   const handleSubmit = useCallback(async () => {
     if (!answer.trim() || !row) return;
@@ -190,7 +195,14 @@ export default function AssignmentDetailPage({
         返回作业列表
       </button>
 
-      {isGraded && detail ? (
+      {stillResolvingRoute ? (
+        /* ── Loading skeleton — don't flash mock content ── */
+        <div className="space-y-4">
+          <div className="h-7 w-64 rounded bg-ink-surface animate-pulse" />
+          <div className="h-3 w-40 rounded bg-ink-surface animate-pulse" />
+          <div className="h-32 w-full rounded-xl bg-ink-surface animate-pulse" />
+        </div>
+      ) : isGraded && detail ? (
         /* ── Review mode (graded) ── */
         <div className="space-y-6">
           <div>
