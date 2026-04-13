@@ -56,17 +56,31 @@ class LLMClient:
         json_mode: bool = False,
         model: str | None = None,
     ) -> str:
-        """Single (non-streaming) chat completion. Returns the assistant text."""
+        """Chat completion — returns the assistant text.
+
+        IMPORTANT: CLIProxyAPI + GPT-5.4 return `content=null` in non-streaming
+        mode (reasoning model quirk where output is only emitted as deltas).
+        We therefore use streaming under the hood and accumulate the delta
+        chunks, so callers get the full response as a single string.
+        """
         kwargs: dict = {
             "model": model or self.default_model,
             "messages": messages,
+            "stream": True,
         }
         if json_mode:
             kwargs["response_format"] = {"type": "json_object"}
 
+        collected: list[str] = []
         try:
             resp = await self._client.chat.completions.create(**kwargs)
-            return resp.choices[0].message.content or ""
+            async for chunk in resp:
+                if not chunk.choices:
+                    continue
+                delta = chunk.choices[0].delta.content
+                if delta:
+                    collected.append(delta)
+            return "".join(collected)
         except openai.APIConnectionError as e:
             logger.error("LLM connection failed: %s", e)
             raise RuntimeError(f"无法连接到 LLM 服务: {e}") from e
