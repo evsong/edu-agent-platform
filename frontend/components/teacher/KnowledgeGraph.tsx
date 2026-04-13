@@ -186,19 +186,19 @@ export default function KnowledgeGraph({ data }: KnowledgeGraphProps) {
         nodeLabel="name"
         nodeColor="color"
         nodeVal="val"
-        nodeThreeObjectExtend={false}
-        nodeThreeObject={(node: Record<string, unknown>) => {
-          const n = node as { name: string; color: string; val: number };
-          return makeNodeObject(n.name, n.color, n.val);
-        }}
-        linkColor={() => "rgba(99, 102, 241, 0.5)"}
-        linkOpacity={0.7}
+        nodeResolution={16}
+        nodeOpacity={1}
+        linkColor={() => "#818cf8"}
+        linkOpacity={0.85}
         linkWidth={(link: Record<string, unknown>) =>
-          (link as { type?: string }).type === "prerequisite" ? 2 : 1
+          (link as { type?: string }).type === "prerequisite" ? 3 : 1.5
         }
-        linkDirectionalParticles={2}
-        linkDirectionalParticleWidth={1.5}
-        linkDirectionalParticleColor={() => "#a5b4fc"}
+        linkDirectionalArrowLength={4}
+        linkDirectionalArrowRelPos={0.95}
+        linkDirectionalArrowColor={() => "#c7d2fe"}
+        linkDirectionalParticles={3}
+        linkDirectionalParticleWidth={2.5}
+        linkDirectionalParticleColor={() => "#e0e7ff"}
         enableNodeDrag={true}
         enableNavigationControls={true}
         numDimensions={is3D ? 3 : 2}
