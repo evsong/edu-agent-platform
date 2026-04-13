@@ -16,9 +16,13 @@ import { cn } from "@/lib/utils";
 interface UploadTask {
   id: string;
   filename: string;
-  status: "uploading" | "processing" | "completed" | "error";
-  progress?: string; // "3/5" for PDF pages
+  status: "uploading" | "queued" | "extracting" | "indexing" | "completed" | "error";
+  progress?: string; // "3/5" chunks uploaded, or status detail
+  uploadPct?: number; // 0-100 for chunk upload progress
 }
+
+const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB per chunk
+const CHUNK_THRESHOLD = 10 * 1024 * 1024; // files > 10MB use chunked upload
 
 function formatSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -53,55 +57,114 @@ export default function KnowledgeBasePage({
     queryFn: () => fetchKnowledgeGraph(id),
   });
 
-  const pollTask = useCallback(async (taskId: string, _filename: string) => {
+  const pollTask = useCallback((taskId: string, localId: string) => {
     const interval = setInterval(async () => {
       try {
         const res = await fetch(`/api/knowledge/upload-status/${taskId}`, {
           headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
         });
-        const status = await res.json() as { status: string; progress?: string; chunk_count?: number };
-        setUploads(prev => prev.map(u => u.id === taskId ? { ...u, status: status.status as UploadTask["status"], progress: status.progress } : u));
+        if (!res.ok) throw new Error("status fetch failed");
+        const status = await res.json() as { status: string; message?: string };
+        setUploads(prev => prev.map(u => u.id === localId ? {
+          ...u,
+          status: status.status as UploadTask["status"],
+          progress: status.message,
+        } : u));
         if (status.status === "completed" || status.status === "error") {
           clearInterval(interval);
           queryClient.invalidateQueries({ queryKey: ["knowledge-docs"] });
         }
       } catch {
         clearInterval(interval);
+        setUploads(prev => prev.map(u => u.id === localId ? { ...u, status: "error" } : u));
       }
-    }, 5000);
+    }, 3000);
   }, [queryClient]);
+
+  const uploadChunked = useCallback(async (file: File, localId: string): Promise<string | null> => {
+    const token = localStorage.getItem("token");
+    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+
+    // 1. Init session
+    const initForm = new FormData();
+    initForm.append("course_id", id);
+    initForm.append("filename", file.name);
+    initForm.append("total_chunks", String(totalChunks));
+    initForm.append("file_size", String(file.size));
+    const initRes = await fetch("/api/knowledge/upload/init", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: initForm,
+    });
+    if (!initRes.ok) throw new Error("init failed");
+    const { upload_id } = await initRes.json() as { upload_id: string };
+
+    // 2. Upload chunks sequentially
+    for (let i = 0; i < totalChunks; i++) {
+      const start = i * CHUNK_SIZE;
+      const end = Math.min(start + CHUNK_SIZE, file.size);
+      const chunkBlob = file.slice(start, end);
+      const chunkForm = new FormData();
+      chunkForm.append("chunk_index", String(i));
+      chunkForm.append("chunk", chunkBlob, `chunk_${i}`);
+      const chunkRes = await fetch(`/api/knowledge/upload/chunk/${upload_id}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: chunkForm,
+      });
+      if (!chunkRes.ok) throw new Error(`chunk ${i} failed`);
+      const uploadPct = Math.round(((i + 1) / totalChunks) * 100);
+      setUploads(prev => prev.map(u => u.id === localId ? {
+        ...u,
+        uploadPct,
+        progress: `${i + 1}/${totalChunks} 块`,
+      } : u));
+    }
+
+    // 3. Complete
+    const completeRes = await fetch(`/api/knowledge/upload/complete/${upload_id}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!completeRes.ok) throw new Error("complete failed");
+    const { task_id } = await completeRes.json() as { task_id: string };
+    return task_id;
+  }, [id]);
+
+  const uploadSimple = useCallback(async (file: File, localId: string): Promise<string | null> => {
+    const formData = new FormData();
+    formData.append("course_id", id);
+    formData.append("file", file);
+    const res = await fetch("/api/knowledge/upload", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      body: formData,
+    });
+    if (!res.ok) throw new Error("upload failed");
+    setUploads(prev => prev.map(u => u.id === localId ? { ...u, uploadPct: 100 } : u));
+    const { task_id } = await res.json() as { task_id: string };
+    return task_id;
+  }, [id]);
 
   const handleFiles = useCallback(async (files: FileList) => {
     for (const file of Array.from(files)) {
-      const taskId = crypto.randomUUID();
-      setUploads(prev => [...prev, { id: taskId, filename: file.name, status: "uploading" }]);
-
-      const formData = new FormData();
-      formData.append("course_id", id);
-      formData.append("file", file);
+      const localId = crypto.randomUUID();
+      setUploads(prev => [...prev, { id: localId, filename: file.name, status: "uploading", uploadPct: 0 }]);
 
       try {
-        const res = await fetch(`/api/knowledge/upload`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-          body: formData,
-        });
-        const data = await res.json() as { task_id?: string; document_id?: string; chunk_count?: number };
-
-        if (data.task_id) {
-          // PDF async processing
-          setUploads(prev => prev.map(u => u.id === taskId ? { ...u, id: data.task_id!, status: "processing" } : u));
-          pollTask(data.task_id, file.name);
-        } else {
-          // Immediate completion (text files)
-          setUploads(prev => prev.map(u => u.id === taskId ? { ...u, status: "completed" } : u));
-          queryClient.invalidateQueries({ queryKey: ["knowledge-docs"] });
+        const taskId = file.size > CHUNK_THRESHOLD
+          ? await uploadChunked(file, localId)
+          : await uploadSimple(file, localId);
+        if (taskId) {
+          setUploads(prev => prev.map(u => u.id === localId ? { ...u, status: "queued" } : u));
+          pollTask(taskId, localId);
         }
-      } catch {
-        setUploads(prev => prev.map(u => u.id === taskId ? { ...u, status: "error" } : u));
+      } catch (err) {
+        console.error("upload failed", err);
+        setUploads(prev => prev.map(u => u.id === localId ? { ...u, status: "error" } : u));
       }
     }
-  }, [id, pollTask, queryClient]);
+  }, [uploadChunked, uploadSimple, pollTask]);
 
   const handleRebuild = useCallback(async () => {
     setRebuilding(true);
@@ -206,7 +269,7 @@ export default function KnowledgeBasePage({
               </button>
             </p>
             <p className="mt-1 text-xs text-ink-text-light">
-              支持 PDF, DOCX, PPTX, XLSX, CSV, HTML, EPUB 等格式，单文件最大 50MB
+              支持 PDF, DOCX, PPTX, XLSX, CSV, HTML, EPUB 等格式，单文件最大 500MB（大文件自动分片上传）
             </p>
           </div>
         </div>
@@ -215,25 +278,34 @@ export default function KnowledgeBasePage({
       {/* Upload progress */}
       {uploads.length > 0 && (
         <div className="space-y-2">
-          {uploads.map(u => (
-            <div key={u.id} className="flex items-center gap-3 rounded-lg border border-ink-border bg-white p-3">
-              <i className={u.status === "completed" ? "ri-checkbox-circle-fill text-ink-success" : u.status === "error" ? "ri-error-warning-fill text-ink-error" : "ri-loader-4-line animate-spin text-ink-primary"} />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-ink-text truncate">{u.filename}</p>
-                <p className="text-xs text-ink-text-muted">
-                  {u.status === "uploading" ? "上传中..." :
-                   u.status === "processing" ? `OCR 处理中 ${u.progress || ""}` :
-                   u.status === "completed" ? "导入完成" : "导入失败"}
-                </p>
-              </div>
-              {u.status === "processing" && u.progress && (
-                <div className="w-20 h-1.5 rounded-full bg-ink-surface overflow-hidden">
-                  <div className="h-full bg-ink-primary rounded-full transition-all"
-                       style={{ width: `${parseInt(u.progress.split("/")[0]) / parseInt(u.progress.split("/")[1]) * 100}%` }} />
+          {uploads.map(u => {
+            const statusLabel =
+              u.status === "uploading" ? `上传中 ${u.uploadPct ?? 0}%${u.progress ? ` · ${u.progress}` : ""}` :
+              u.status === "queued" ? "已入队，等待处理" :
+              u.status === "extracting" ? "提取文本中..." :
+              u.status === "indexing" ? "建立索引中..." :
+              u.status === "completed" ? "导入完成" : "导入失败";
+            const icon =
+              u.status === "completed" ? "ri-checkbox-circle-fill text-ink-success" :
+              u.status === "error" ? "ri-error-warning-fill text-ink-error" :
+              "ri-loader-4-line animate-spin text-ink-primary";
+            const showBar = u.status === "uploading" && u.uploadPct !== undefined;
+            return (
+              <div key={u.id} className="flex items-center gap-3 rounded-lg border border-ink-border bg-white p-3">
+                <i className={icon} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-ink-text truncate">{u.filename}</p>
+                  <p className="text-xs text-ink-text-muted">{statusLabel}</p>
+                  {showBar && (
+                    <div className="mt-1.5 h-1 w-full rounded-full bg-ink-surface overflow-hidden">
+                      <div className="h-full bg-ink-primary rounded-full transition-all"
+                           style={{ width: `${u.uploadPct}%` }} />
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          ))}
+              </div>
+            );
+          })}
         </div>
       )}
 
