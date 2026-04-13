@@ -85,6 +85,45 @@ export default function CourseDetailPage({
     },
   });
 
+  // ─── Enroll-students UI state + queries ──────────────────────────
+  const [showEnroll, setShowEnroll] = useState(false);
+  const [enrollPicks, setEnrollPicks] = useState<Set<string>>(new Set());
+
+  const { data: availableStudents } = useQuery({
+    queryKey: ["available-students-for-enroll"],
+    queryFn: async () => {
+      try {
+        const res = await apiFetch<{
+          students: Array<{ id: string; name: string; email?: string }>;
+        }>("/api/courses/available-students");
+        return res.students || [];
+      } catch {
+        return [];
+      }
+    },
+    enabled: showEnroll,
+  });
+
+  const enrolledIdSet = new Set(students.map((s) => (s as { id: string }).id));
+  const eligibleStudents = (availableStudents ?? []).filter(
+    (s) => !enrolledIdSet.has(s.id),
+  );
+
+  const enrollMutation = useMutation({
+    mutationFn: (student_ids: string[]) =>
+      apiFetch(`/api/courses/${id}/enroll`, {
+        method: "POST",
+        body: JSON.stringify({ student_ids }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["course-students", id] });
+      queryClient.invalidateQueries({ queryKey: ["course", id] });
+      queryClient.invalidateQueries({ queryKey: ["courses"] });
+      setShowEnroll(false);
+      setEnrollPicks(new Set());
+    },
+  });
+
   if (!course) {
     return (
       <div className="space-y-4">
@@ -193,7 +232,86 @@ export default function CourseDetailPage({
           </div>
         </TabsContent>
 
-        <TabsContent value="students" className="mt-6">
+        <TabsContent value="students" className="mt-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-ink-text-muted">
+              当前 {students.length} 名学生
+            </p>
+            <button
+              onClick={() => setShowEnroll((v) => !v)}
+              className="inline-flex h-9 items-center gap-2 rounded-lg bg-ink-primary px-4 text-sm font-medium text-white hover:bg-ink-primary-dark"
+            >
+              <i className={showEnroll ? "ri-close-line" : "ri-user-add-line"} />
+              {showEnroll ? "取消" : "加入学生"}
+            </button>
+          </div>
+
+          {showEnroll && (
+            <div className="rounded-xl border border-ink-primary/20 bg-ink-primary-lighter/30 p-5">
+              <div className="mb-3 flex items-center justify-between">
+                <p className="text-xs font-medium text-ink-text">
+                  选择要加入的学生（已选 {enrollPicks.size} 名）
+                </p>
+                <div className="flex gap-2 text-xs">
+                  <button
+                    onClick={() => setEnrollPicks(new Set(eligibleStudents.map((s) => s.id)))}
+                    className="text-ink-primary hover:underline"
+                  >
+                    全选
+                  </button>
+                  <span className="text-ink-text-light">|</span>
+                  <button
+                    onClick={() => setEnrollPicks(new Set())}
+                    className="text-ink-primary hover:underline"
+                  >
+                    清空
+                  </button>
+                </div>
+              </div>
+              {eligibleStudents.length === 0 ? (
+                <p className="py-4 text-center text-xs text-ink-text-muted">
+                  没有未加入的学生
+                </p>
+              ) : (
+                <div className="grid max-h-64 grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-3 lg:grid-cols-4">
+                  {eligibleStudents.map((s) => {
+                    const picked = enrollPicks.has(s.id);
+                    return (
+                      <label
+                        key={s.id}
+                        className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs transition-colors ${picked ? "border-ink-primary bg-ink-primary/10" : "border-ink-border bg-white hover:bg-ink-surface"}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={picked}
+                          onChange={(e) => {
+                            const next = new Set(enrollPicks);
+                            if (e.target.checked) next.add(s.id);
+                            else next.delete(s.id);
+                            setEnrollPicks(next);
+                          }}
+                          className="h-3 w-3"
+                        />
+                        <span className="truncate text-ink-text">{s.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+              <button
+                onClick={() => enrollPicks.size > 0 && enrollMutation.mutate(Array.from(enrollPicks))}
+                disabled={enrollPicks.size === 0 || enrollMutation.isPending}
+                className="mt-4 inline-flex h-8 items-center gap-1.5 rounded-lg bg-ink-primary px-4 text-xs font-medium text-white hover:bg-ink-primary-dark disabled:opacity-50"
+              >
+                {enrollMutation.isPending ? (
+                  <><i className="ri-loader-4-line animate-spin" /> 加入中...</>
+                ) : (
+                  <><i className="ri-check-line" /> 加入选中的 {enrollPicks.size} 名学生</>
+                )}
+              </button>
+            </div>
+          )}
+
           <div className="rounded-xl border border-ink-border bg-white overflow-x-auto">
             <table className="w-full min-w-[480px] text-sm">
               <thead>
