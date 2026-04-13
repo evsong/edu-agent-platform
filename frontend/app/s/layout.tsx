@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -136,10 +136,20 @@ export default function StudentLayout({
           queries: {
             staleTime: 30_000,
             retry: 1,
+            refetchOnMount: "always",
           },
         },
       }),
   );
+
+  // Bust browser bfcache: when restoring from history, force a fresh load.
+  useEffect(() => {
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) window.location.reload();
+    };
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>

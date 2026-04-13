@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Sidebar from "@/components/teacher/Sidebar";
 import CommandPalette from "@/components/teacher/CommandPalette";
 import { MobileTabBar } from "@/components/shared/MobileTabBar";
@@ -54,10 +54,19 @@ export default function TeacherLayout({
           queries: {
             staleTime: 30_000,
             retry: 1,
+            refetchOnMount: "always",
           },
         },
       }),
   );
+
+  useEffect(() => {
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) window.location.reload();
+    };
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
