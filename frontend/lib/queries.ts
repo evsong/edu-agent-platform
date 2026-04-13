@@ -56,7 +56,7 @@ export interface Submission {
   student_avatar: string;
   assignment_title: string;
   submitted_at: string;
-  status: "pending" | "ai_graded" | "teacher_graded";
+  status: "pending" | "submitted" | "ai_graded" | "teacher_graded" | "graded";
   score?: number;
 }
 
