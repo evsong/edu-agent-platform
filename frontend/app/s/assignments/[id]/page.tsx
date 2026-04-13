@@ -145,7 +145,10 @@ export default function AssignmentDetailPage({
     row?.status === "ai_graded" ||
     row?.status === "teacher_graded";
 
-  const gradingDetail = speculativeGrading;
+  const gradingDetail = speculativeGrading ?? null;
+  // Compute the renderable detail object. Never fall back to mockGradedDetail
+  // — mock content leaking onto the screen is exactly the bug we're fixing.
+  const detail = gradingDetail;
 
   // While we don't yet know whether the URL points at a graded submission
   // or a fresh assignment, render a skeleton instead of the mock pending
@@ -177,8 +180,6 @@ export default function AssignmentDetailPage({
       setSubmitting(false);
     }
   }, [row, answer]);
-
-  const detail = gradingDetail ?? (isGraded ? mockGradedDetail : null);
 
   return (
     <motion.div
@@ -229,15 +230,22 @@ export default function AssignmentDetailPage({
             开始针对练习
           </Button>
         </div>
+      ) : !row ? (
+        /* ── Loading skeleton — wait for row metadata ── */
+        <div className="space-y-4">
+          <div className="h-7 w-64 rounded bg-ink-surface animate-pulse" />
+          <div className="h-3 w-40 rounded bg-ink-surface animate-pulse" />
+          <div className="h-32 w-full rounded-xl bg-ink-surface animate-pulse" />
+        </div>
       ) : (
         /* ── Submit mode (pending) ── */
         <div className="space-y-6">
           <div>
             <h1 className="text-2xl font-heading font-bold text-ink-text">
-              {row?.assignment_title ?? mockPendingDetail.title}
+              {row.assignment_title}
             </h1>
             <p className="mt-1 text-sm text-ink-text-muted">
-              {row?.course_name ?? mockPendingDetail.course_name}
+              {row.course_name}
             </p>
           </div>
 
@@ -248,7 +256,7 @@ export default function AssignmentDetailPage({
               题目要求
             </h3>
             <div className="text-sm text-ink-text leading-relaxed whitespace-pre-wrap font-mono">
-              {row?.description ?? mockPendingDetail.description}
+              {row.description ?? ""}
             </div>
           </div>
 
