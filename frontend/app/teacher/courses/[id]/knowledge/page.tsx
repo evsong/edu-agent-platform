@@ -35,6 +35,12 @@ const statusConfig = {
   failed: { label: "失败", cls: "bg-ink-error-light text-ink-error" },
 };
 
+interface CourseStudent {
+  id: string;
+  name: string;
+  email?: string;
+}
+
 export default function KnowledgeBasePage({
   params,
 }: {
@@ -44,6 +50,9 @@ export default function KnowledgeBasePage({
   const [isDragActive, setIsDragActive] = useState(false);
   const [rebuilding, setRebuilding] = useState(false);
   const [uploads, setUploads] = useState<UploadTask[]>([]);
+  const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
+  const [studentPickerOpen, setStudentPickerOpen] = useState(false);
+  const [graphDocFilter, setGraphDocFilter] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
 
@@ -52,9 +61,27 @@ export default function KnowledgeBasePage({
     queryFn: () => fetchKnowledgeDocs(id),
   });
 
+  // Fetch enrolled students for this course (for upload access picker)
+  const { data: courseStudents } = useQuery({
+    queryKey: ["course-students", id],
+    queryFn: async () => {
+      try {
+        const res = await fetch(`/api/courses/${id}/students`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        });
+        if (!res.ok) return [];
+        const data = await res.json() as { students?: Array<{ id: string; name: string; email?: string }> };
+        return data.students || [];
+      } catch {
+        return [];
+      }
+    },
+  });
+  const students: CourseStudent[] = courseStudents || [];
+
   const { data: graphData } = useQuery({
-    queryKey: ["knowledge-graph", id],
-    queryFn: () => fetchKnowledgeGraph(id),
+    queryKey: ["knowledge-graph", id, graphDocFilter],
+    queryFn: () => fetchKnowledgeGraph(id, graphDocFilter || undefined),
   });
 
   const pollTask = useCallback((taskId: string, localId: string) => {
@@ -81,7 +108,7 @@ export default function KnowledgeBasePage({
     }, 3000);
   }, [queryClient]);
 
-  const uploadChunked = useCallback(async (file: File, localId: string): Promise<string | null> => {
+  const uploadChunked = useCallback(async (file: File, localId: string, studentIds: string[]): Promise<string | null> => {
     const token = localStorage.getItem("token");
     const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
 
@@ -91,6 +118,7 @@ export default function KnowledgeBasePage({
     initForm.append("filename", file.name);
     initForm.append("total_chunks", String(totalChunks));
     initForm.append("file_size", String(file.size));
+    initForm.append("allowed_student_ids", JSON.stringify(studentIds));
     const initRes = await fetch("/api/knowledge/upload/init", {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
@@ -131,10 +159,11 @@ export default function KnowledgeBasePage({
     return task_id;
   }, [id]);
 
-  const uploadSimple = useCallback(async (file: File, localId: string): Promise<string | null> => {
+  const uploadSimple = useCallback(async (file: File, localId: string, studentIds: string[]): Promise<string | null> => {
     const formData = new FormData();
     formData.append("course_id", id);
     formData.append("file", file);
+    formData.append("allowed_student_ids", JSON.stringify(studentIds));
     const res = await fetch("/api/knowledge/upload", {
       method: "POST",
       headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
@@ -147,14 +176,15 @@ export default function KnowledgeBasePage({
   }, [id]);
 
   const handleFiles = useCallback(async (files: FileList) => {
+    const studentIds = Array.from(selectedStudentIds);
     for (const file of Array.from(files)) {
       const localId = crypto.randomUUID();
       setUploads(prev => [...prev, { id: localId, filename: file.name, status: "uploading", uploadPct: 0 }]);
 
       try {
         const taskId = file.size > CHUNK_THRESHOLD
-          ? await uploadChunked(file, localId)
-          : await uploadSimple(file, localId);
+          ? await uploadChunked(file, localId, studentIds)
+          : await uploadSimple(file, localId, studentIds);
         if (taskId) {
           setUploads(prev => prev.map(u => u.id === localId ? { ...u, status: "queued" } : u));
           pollTask(taskId, localId);
@@ -164,7 +194,7 @@ export default function KnowledgeBasePage({
         setUploads(prev => prev.map(u => u.id === localId ? { ...u, status: "error" } : u));
       }
     }
-  }, [uploadChunked, uploadSimple, pollTask]);
+  }, [uploadChunked, uploadSimple, pollTask, selectedStudentIds]);
 
   const handleRebuild = useCallback(async () => {
     setRebuilding(true);
@@ -239,6 +269,87 @@ export default function KnowledgeBasePage({
         className="hidden"
         onChange={(e) => { if (e.target.files?.length) { handleFiles(e.target.files); e.target.value = ""; } }}
       />
+
+      {/* Student Access Picker */}
+      <div className="rounded-xl border border-ink-border bg-white p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-ink-text">
+              <i className="ri-user-settings-line mr-1.5 text-ink-primary" />
+              教材访问权限
+            </h3>
+            <p className="mt-1 text-xs text-ink-text-muted">
+              {selectedStudentIds.size === 0
+                ? "将应用到下一次上传 · 未选择则默认全课程可见"
+                : `已选择 ${selectedStudentIds.size} / ${students.length} 名学生 · 将应用到下一次上传`}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            {students.length > 0 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setSelectedStudentIds(new Set(students.map(s => s.id)))}
+                  className="text-xs text-ink-primary hover:underline"
+                >
+                  全选
+                </button>
+                <span className="text-xs text-ink-text-light">|</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedStudentIds(new Set())}
+                  className="text-xs text-ink-text-muted hover:text-ink-text"
+                >
+                  清空
+                </button>
+                <span className="text-xs text-ink-text-light">|</span>
+              </>
+            )}
+            <button
+              type="button"
+              onClick={() => setStudentPickerOpen(o => !o)}
+              className="text-xs text-ink-primary hover:underline"
+            >
+              {studentPickerOpen ? "收起" : "展开"}
+            </button>
+          </div>
+        </div>
+        {studentPickerOpen && students.length > 0 && (
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+            {students.map(s => {
+              const checked = selectedStudentIds.has(s.id);
+              return (
+                <label
+                  key={s.id}
+                  className={cn(
+                    "flex items-center gap-2 rounded-lg border px-3 py-2 text-sm cursor-pointer transition-colors",
+                    checked
+                      ? "border-ink-primary bg-ink-primary-lighter text-ink-primary"
+                      : "border-ink-border bg-white text-ink-text hover:bg-ink-surface",
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => {
+                      setSelectedStudentIds(prev => {
+                        const next = new Set(prev);
+                        if (next.has(s.id)) next.delete(s.id); else next.add(s.id);
+                        return next;
+                      });
+                    }}
+                    className="accent-ink-primary"
+                  />
+                  <span className="truncate">{s.name}</span>
+                </label>
+              );
+            })}
+          </div>
+        )}
+        {studentPickerOpen && students.length === 0 && (
+          <p className="mt-3 text-xs text-ink-text-muted">当前课程暂无学生</p>
+        )}
+      </div>
 
       {/* Upload Dropzone */}
       <div
@@ -361,9 +472,28 @@ export default function KnowledgeBasePage({
 
       {/* Knowledge Graph */}
       <div>
-        <h2 className="mb-3 text-lg font-heading font-semibold text-ink-text">
-          知识图谱
-        </h2>
+        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="text-lg font-heading font-semibold text-ink-text">
+            知识图谱
+          </h2>
+          {docList.length > 0 && (
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-ink-text-muted">按教材筛选：</label>
+              <select
+                value={graphDocFilter}
+                onChange={(e) => setGraphDocFilter(e.target.value)}
+                className="rounded-md border border-ink-border bg-white px-3 py-1.5 text-xs text-ink-text outline-none focus:border-ink-primary"
+              >
+                <option value="">全部课程（{graph.nodes.length} 节点）</option>
+                {docList.map(d => (
+                  <option key={d.id} value={d.id}>
+                    {d.filename}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
         <KnowledgeGraph data={graph} />
       </div>
     </motion.div>

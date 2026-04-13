@@ -133,10 +133,11 @@ export async function fetchWarnings(courseId: string) {
   return res.warnings;
 }
 
-export async function fetchKnowledgeGraph(courseId: string) {
-  const res = await apiFetch<{ nodes: any[]; edges: any[] }>(
-    `/api/knowledge/graph/${courseId}`,
-  );
+export async function fetchKnowledgeGraph(courseId: string, documentId?: string) {
+  const url = documentId
+    ? `/api/knowledge/graph/${courseId}?document_id=${encodeURIComponent(documentId)}`
+    : `/api/knowledge/graph/${courseId}`;
+  const res = await apiFetch<{ nodes: any[]; edges: any[] }>(url);
   return {
     nodes: res.nodes.map((n: any) => ({
       ...n,
