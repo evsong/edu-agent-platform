@@ -94,8 +94,9 @@ class QAAgent(BaseAgent):
         try:
             from app.api.agents import get_active_agent
 
-            if ctx.db_session is not None and ctx.course_id:
-                agent_cfg = await get_active_agent(ctx.db_session, ctx.course_id, "qa")
+            db_session = getattr(ctx, "session", None) or getattr(ctx, "db_session", None)
+            if db_session is not None and ctx.course_id:
+                agent_cfg = await get_active_agent(db_session, ctx.course_id, "qa")
         except Exception:
             logger.exception("QA Agent: failed to load per-course config")
 
