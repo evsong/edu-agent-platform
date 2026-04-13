@@ -345,17 +345,24 @@ export default function CourseDetailPage({
                     </td>
                     <td className="px-4 py-3 text-ink-text-muted">{s.email}</td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <div className="h-1.5 w-20 rounded-full bg-ink-surface overflow-hidden">
-                          <div
-                            className="h-full rounded-full bg-ink-primary transition-all"
-                            style={{ width: `${(s as any).overall_mastery ?? s.mastery ?? 0}%` }}
-                          />
-                        </div>
-                        <span className="text-xs font-mono text-ink-text-muted">
-                          {(s as any).overall_mastery ?? s.mastery ?? 0}%
-                        </span>
-                      </div>
+                      {(() => {
+                        const raw = (s as { overall_mastery?: number; mastery?: number }).overall_mastery ?? (s as { mastery?: number }).mastery ?? 0;
+                        // Backend may return 0..1 or 0..100 — normalize.
+                        const pct = Math.round((raw > 1 ? raw : raw * 100));
+                        return (
+                          <div className="flex items-center gap-2">
+                            <div className="h-1.5 w-20 rounded-full bg-ink-surface overflow-hidden">
+                              <div
+                                className="h-full rounded-full bg-ink-primary transition-all"
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                            <span className="text-xs font-mono text-ink-text-muted">
+                              {pct}%
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </td>
                   </tr>
                 ))}
