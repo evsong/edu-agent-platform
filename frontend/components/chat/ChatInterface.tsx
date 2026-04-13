@@ -134,9 +134,12 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(functi
     const controller = new AbortController();
     abortRef.current = controller;
     let receivedContent = false;
+    // Wait up to 90s for the first token (LangGraph director + QA agent
+    // can easily take 25–60s cold). Once content starts streaming, the
+    // timeout becomes irrelevant.
     const timeout = setTimeout(() => {
       if (!receivedContent) controller.abort();
-    }, 30000);
+    }, 90000);
 
     try {
       const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
