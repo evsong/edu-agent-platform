@@ -83,8 +83,15 @@ class KnowledgeService:
         course_id: str,
         filename: str,
         content: str,
+        file_size: int = 0,
+        allowed_student_ids: list[str] | None = None,
     ) -> dict[str, Any]:
-        """Chunk, embed, store in Milvus, then extract KPs into Neo4j."""
+        """Chunk, embed, store in Milvus, then extract KPs into Neo4j.
+
+        If allowed_student_ids is provided (non-empty list), only those
+        students will be able to access this document. Empty list or
+        None means all students in the course can access.
+        """
 
         import asyncio
 
@@ -101,8 +108,38 @@ class KnowledgeService:
         col_name = self._collection_name(course_id)
         await asyncio.to_thread(self._ensure_collection, col_name)
 
-        # 4. Insert chunks + vectors (sync milvus call in thread)
-        doc_id = uuid.uuid4().hex
+        # 4. Create Document record in PostgreSQL first (need its UUID for KP links)
+        from app.database import async_session as AsyncSessionLocal
+        from app.models.document import Document as DocumentModel
+        import uuid as _uuid
+
+        try:
+            course_uuid = _uuid.UUID(course_id)
+        except ValueError:
+            course_uuid = None
+
+        document_uuid = _uuid.uuid4()
+        doc_id = document_uuid.hex  # for Milvus chunk metadata
+
+        if course_uuid:
+            async with AsyncSessionLocal() as db:
+                try:
+                    pg_doc = DocumentModel(
+                        id=document_uuid,
+                        course_id=course_uuid,
+                        filename=filename,
+                        file_size=file_size,
+                        chunk_count=len(chunk_texts),
+                        status="indexed",
+                        allowed_student_ids={"ids": allowed_student_ids or []},
+                    )
+                    db.add(pg_doc)
+                    await db.commit()
+                except Exception as e:
+                    logger.warning(f"Failed to create Document row: {e}")
+                    await db.rollback()
+
+        # 5. Insert chunks + vectors into Milvus
         rows = [
             {
                 "id": f"{doc_id}_{i}",
@@ -170,19 +207,12 @@ class KnowledgeService:
             if stem:
                 kp_list = [{"name": stem[:40], "difficulty": 2, "tags": ["document"]}]
 
-        # 6. Create knowledge points in PostgreSQL (authoritative) and Neo4j
-        from app.database import async_session as AsyncSessionLocal
+        # 7. Create knowledge points in PostgreSQL (linked to document) + Neo4j
         from app.models.knowledge_point import KnowledgePoint as KPModel
-        import uuid as _uuid
 
         created_count = 0
-        async with AsyncSessionLocal() as db:
-            try:
-                course_uuid = _uuid.UUID(course_id)
-            except ValueError:
-                course_uuid = None
-
-            if course_uuid:
+        if course_uuid:
+            async with AsyncSessionLocal() as db:
                 for kp in kp_list:
                     name = str(kp.get("name", "")).strip()
                     if not name:
@@ -191,6 +221,7 @@ class KnowledgeService:
                         id=_uuid.uuid4(),
                         name=name[:500],
                         course_id=course_uuid,
+                        document_id=document_uuid,
                         difficulty=int(kp.get("difficulty", 1) or 1),
                         tags={"tags": kp.get("tags", []), "source": filename},
                     )
@@ -335,15 +366,66 @@ class KnowledgeService:
 
     # ── get_graph ────────────────────────────────────────────────
 
+    async def list_documents(
+        self,
+        course_id: str,
+        user_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """List documents for a course, optionally filtered by student access.
+
+        If user_id is provided and a document has non-empty allowed_student_ids,
+        the document is only returned when user_id is in that list.
+        """
+        from sqlalchemy import select
+        from app.database import async_session as AsyncSessionLocal
+        from app.models.document import Document as DocumentModel
+        import uuid as _uuid
+
+        try:
+            course_uuid = _uuid.UUID(course_id)
+        except ValueError:
+            return []
+
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(DocumentModel)
+                .where(DocumentModel.course_id == course_uuid)
+                .order_by(DocumentModel.uploaded_at.desc())
+            )
+            docs = result.scalars().all()
+
+        output = []
+        for d in docs:
+            allowed = (d.allowed_student_ids or {}).get("ids", []) if isinstance(d.allowed_student_ids, dict) else []
+            # If allowed list is non-empty and user_id not in it, skip
+            if user_id and allowed and user_id not in allowed:
+                continue
+            output.append({
+                "id": str(d.id),
+                "filename": d.filename,
+                "size": d.file_size,
+                "chunk_count": d.chunk_count,
+                "uploaded_at": d.uploaded_at.isoformat() + "Z" if d.uploaded_at else None,
+                "status": d.status,
+                "allowed_student_ids": allowed,
+            })
+        return output
+
     async def get_graph(
         self,
         course_id: str | None = None,
+        document_id: str | None = None,
     ) -> dict[str, Any]:
         """Return knowledge graph as {nodes, edges} for visualization.
 
-        Primary source: PostgreSQL `knowledge_points` table (always populated
-        by seed data and upload pipeline). Neo4j is used to enrich with edges
-        when available.
+        Filters:
+          - course_id: limit to a single course
+          - document_id: limit to a single uploaded textbook (takes priority
+            over course_id). When set, only KPs linked to that document
+            are returned.
+
+        Primary source: PostgreSQL `knowledge_points` table. Neo4j is used
+        to enrich with relationship edges when available.
         """
         from sqlalchemy import select
         from app.database import async_session as AsyncSessionLocal
@@ -353,11 +435,17 @@ class KnowledgeService:
         edges: list[dict] = []
 
         # 1. Load KP nodes from PostgreSQL (authoritative)
-        kp_by_course: dict[str, list[dict]] = {}
+        kp_by_group: dict[str, list[dict]] = {}
         async with AsyncSessionLocal() as db:
             stmt = select(KPModel)
-            if course_id:
-                import uuid as _uuid
+            import uuid as _uuid
+            if document_id:
+                try:
+                    doc_uuid = _uuid.UUID(document_id)
+                    stmt = stmt.where(KPModel.document_id == doc_uuid)
+                except ValueError:
+                    pass
+            elif course_id:
                 try:
                     course_uuid = _uuid.UUID(course_id)
                     stmt = stmt.where(KPModel.course_id == course_uuid)
@@ -366,20 +454,22 @@ class KnowledgeService:
             result = await db.execute(stmt)
             for kp in result.scalars().all():
                 nid = str(kp.id)
+                group_key = str(kp.document_id) if kp.document_id else str(kp.course_id)
                 node = {
                     "id": nid,
                     "name": kp.name,
                     "course_id": str(kp.course_id),
+                    "document_id": str(kp.document_id) if kp.document_id else None,
                     "difficulty": kp.difficulty,
-                    "group": str(kp.course_id),
+                    "group": group_key,
                 }
                 nodes_map[nid] = node
-                kp_by_course.setdefault(str(kp.course_id), []).append(node)
+                kp_by_group.setdefault(group_key, []).append(node)
 
         # 1b. Generate synthetic "curriculum path" edges so the graph is not
-        # just floating dots. Chain KPs within each course by ascending
-        # difficulty, skipping self-loops.
-        for cid, kps in kp_by_course.items():
+        # just floating dots. Chain KPs within each group (document or
+        # course) by ascending difficulty, skipping self-loops.
+        for group_key, kps in kp_by_group.items():
             ordered = sorted(kps, key=lambda n: (n["difficulty"], n["name"]))
             for a, b in zip(ordered, ordered[1:]):
                 edges.append({

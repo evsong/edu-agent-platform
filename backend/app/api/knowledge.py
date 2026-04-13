@@ -73,7 +73,14 @@ async def _extract_content(file_path: str, filename: str, ext: str) -> str:
     return await asyncio.to_thread(_read_text)
 
 
-async def _process_file_background(task_id: str, course_id: str, filename: str, file_path: str):
+async def _process_file_background(
+    task_id: str,
+    course_id: str,
+    filename: str,
+    file_path: str,
+    file_size: int = 0,
+    allowed_student_ids: list[str] | None = None,
+):
     """Background task: extract content, chunk, embed, store in Milvus."""
     try:
         _upload_tasks[task_id]["status"] = "extracting"
@@ -91,7 +98,11 @@ async def _process_file_background(task_id: str, course_id: str, filename: str, 
         _upload_tasks[task_id]["content_size"] = len(content)
 
         svc = _get_service()
-        result = await svc.upload_document(course_id, filename, content)
+        result = await svc.upload_document(
+            course_id, filename, content,
+            file_size=file_size,
+            allowed_student_ids=allowed_student_ids,
+        )
         _upload_tasks[task_id].update({"status": "completed", **result})
     except Exception as e:
         logger.exception(f"Background task {task_id} failed")
@@ -110,11 +121,24 @@ async def _process_file_background(task_id: str, course_id: str, filename: str, 
 async def upload_document(
     course_id: str = Form(...),
     file: UploadFile = File(...),
+    allowed_student_ids: str = Form(""),
 ):
-    """Simple upload for small files. Saves to temp and starts async processing."""
+    """Simple upload for small files. Saves to temp and starts async processing.
+
+    allowed_student_ids: JSON array of user UUIDs, or empty string for "all".
+    """
     raw_bytes = await file.read()
     filename = file.filename or "untitled.txt"
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "txt"
+
+    # Parse allowed students list
+    import json as _json
+    try:
+        parsed_ids = _json.loads(allowed_student_ids) if allowed_student_ids else []
+        if not isinstance(parsed_ids, list):
+            parsed_ids = []
+    except Exception:
+        parsed_ids = []
 
     # Write to temp file
     tmp_fd, tmp_path = tempfile.mkstemp(suffix=f".{ext}")
@@ -134,7 +158,11 @@ async def upload_document(
         "uploaded_at": _dt.datetime.utcnow().isoformat() + "Z",
     }
 
-    asyncio.create_task(_process_file_background(task_id, course_id, filename, tmp_path))
+    asyncio.create_task(_process_file_background(
+        task_id, course_id, filename, tmp_path,
+        file_size=len(raw_bytes),
+        allowed_student_ids=parsed_ids,
+    ))
     return {"task_id": task_id, "status": "queued", "filename": filename}
 
 
@@ -146,12 +174,21 @@ async def upload_init(
     filename: str = Form(...),
     total_chunks: int = Form(...),
     file_size: int = Form(...),
+    allowed_student_ids: str = Form(""),
 ):
     """Initialize a chunked upload session. Returns upload_id."""
     if total_chunks < 1 or total_chunks > 10000:
         raise HTTPException(status_code=400, detail="Invalid total_chunks")
     if file_size > 500 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File too large (max 500MB)")
+
+    import json as _json
+    try:
+        parsed_ids = _json.loads(allowed_student_ids) if allowed_student_ids else []
+        if not isinstance(parsed_ids, list):
+            parsed_ids = []
+    except Exception:
+        parsed_ids = []
 
     upload_id = str(uuid.uuid4())
     tmp_dir = CHUNK_TMP_ROOT / upload_id
@@ -164,6 +201,7 @@ async def upload_init(
         "file_size": file_size,
         "received": set(),
         "tmp_dir": str(tmp_dir),
+        "allowed_student_ids": parsed_ids,
     }
     return {"upload_id": upload_id}
 
@@ -241,6 +279,8 @@ async def upload_complete(upload_id: str):
     }
     asyncio.create_task(_process_file_background(
         task_id, session["course_id"], filename, merged_path,
+        file_size=session["file_size"],
+        allowed_student_ids=session.get("allowed_student_ids") or [],
     ))
     return {"task_id": task_id, "status": "queued", "filename": filename}
 
@@ -257,29 +297,11 @@ async def get_upload_status(task_id: str):
 # ── Document List ───────────────────────────────────────────────
 
 @router.get("/docs/{course_id}")
-async def list_docs(course_id: str):
-    """List all uploaded documents for a course (from in-memory upload task log)."""
-    import datetime
-    docs = []
-    for task_id, task in _upload_tasks.items():
-        if task.get("course_id") != course_id:
-            continue
-        status_map = {
-            "completed": "indexed",
-            "error": "failed",
-        }
-        ui_status = status_map.get(task.get("status", ""), "processing")
-        docs.append({
-            "id": task.get("document_id") or task_id,
-            "filename": task.get("filename", "unknown"),
-            "size": task.get("file_size", 0),
-            "uploaded_at": task.get("uploaded_at", datetime.datetime.utcnow().isoformat() + "Z"),
-            "status": ui_status,
-            "chunk_count": task.get("chunk_count", 0),
-        })
-    # Newest first
-    docs.sort(key=lambda d: d.get("uploaded_at", ""), reverse=True)
-    return docs
+async def list_docs(course_id: str, user_id: str | None = None):
+    """List documents for a course. If user_id is set, enforce per-document
+    access control (students only see docs they've been granted access to)."""
+    svc = _get_service()
+    return await svc.list_documents(course_id, user_id=user_id)
 
 
 # ── RAG Search ───────────────────────────────────────────────────
@@ -295,10 +317,11 @@ async def search(q: str, course_id: str, top_k: int = 3):
 # ── Knowledge Graph ──────────────────────────────────────────────
 
 @router.get("/graph/{course_id}")
-async def get_graph(course_id: str):
-    """Return the knowledge graph for a specific course."""
+async def get_graph(course_id: str, document_id: str | None = None):
+    """Return the knowledge graph for a specific course, optionally
+    filtered to a single uploaded document."""
     svc = _get_service()
-    return await svc.get_graph(course_id)
+    return await svc.get_graph(course_id, document_id=document_id)
 
 
 @router.get("/graph")

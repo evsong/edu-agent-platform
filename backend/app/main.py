@@ -32,9 +32,19 @@ async def lifespan(app: FastAPI):
     """Create all tables on startup, dispose engine on shutdown."""
     # Import all models so Base.metadata is populated
     import app.models  # noqa: F401
+    from sqlalchemy import text
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Ad-hoc migrations for columns added after initial schema
+        try:
+            await conn.execute(text(
+                "ALTER TABLE knowledge_points "
+                "ADD COLUMN IF NOT EXISTS document_id UUID "
+                "REFERENCES documents(id)"
+            ))
+        except Exception:
+            pass
     yield
     await engine.dispose()
 
