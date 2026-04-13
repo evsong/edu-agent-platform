@@ -116,54 +116,120 @@ class KnowledgeService:
             self.milvus.insert, collection_name=col_name, data=rows
         )
 
-        # 5. Extract knowledge points via LLM
+        # 5. Extract knowledge points via LLM (best effort)
         extraction_prompt = (
-            "Extract knowledge point names from this educational document. "
-            "Return a JSON array of objects, each with keys: "
-            '"name" (string), "difficulty" (integer 1-5), "tags" (string array). '
-            "Only return the JSON array, no other text."
+            "You are extracting knowledge points from an educational document. "
+            "Return a JSON object with a single key 'knowledge_points' mapping to "
+            "an array of at least 5 and up to 15 objects. Each object has: "
+            '"name" (short Chinese or English topic name, under 20 chars), '
+            '"difficulty" (integer 1-5), "tags" (array of 1-3 short strings). '
+            "Only return valid JSON, no markdown fences, no prose."
         )
-        kp_raw = await self.llm.chat(
-            messages=[
-                {"role": "system", "content": extraction_prompt},
-                {"role": "user", "content": content[:8000]},  # truncate for token safety
-            ],
-            json_mode=True,
-        )
+        kp_list: list[dict] = []
         try:
-            kp_list: list[dict] = json.loads(kp_raw)
-            # Handle LLM wrapping the array in an object like {"knowledge_points": [...]}
-            if isinstance(kp_list, dict):
-                kp_list = next(iter(kp_list.values()))  # type: ignore[assignment]
-        except (json.JSONDecodeError, StopIteration):
-            logger.warning("Failed to parse KP extraction result: %s", kp_raw[:200])
-            kp_list = []
+            kp_raw = await self.llm.chat(
+                messages=[
+                    {"role": "system", "content": extraction_prompt},
+                    {"role": "user", "content": content[:8000]},
+                ],
+            )
+            # Strip common wrappers: markdown code fences, prose before/after
+            cleaned = kp_raw.strip()
+            if cleaned.startswith("```"):
+                cleaned = cleaned.split("```", 2)[1]
+                if cleaned.startswith("json"):
+                    cleaned = cleaned[4:]
+                cleaned = cleaned.strip()
+                if cleaned.endswith("```"):
+                    cleaned = cleaned[:-3].strip()
+            # Locate JSON boundaries
+            start = cleaned.find("{")
+            if start >= 0:
+                cleaned = cleaned[start:]
+            end = cleaned.rfind("}")
+            if end >= 0:
+                cleaned = cleaned[:end + 1]
+            parsed = json.loads(cleaned)
+            if isinstance(parsed, dict):
+                # Accept {"knowledge_points": [...]} or first array value
+                if "knowledge_points" in parsed and isinstance(parsed["knowledge_points"], list):
+                    kp_list = parsed["knowledge_points"]
+                else:
+                    for v in parsed.values():
+                        if isinstance(v, list):
+                            kp_list = v
+                            break
+            elif isinstance(parsed, list):
+                kp_list = parsed
+        except Exception as e:
+            logger.warning(f"KP extraction failed: {e}")
 
-        # 6. Create knowledge point nodes in Neo4j
-        async with self.neo4j.session() as session:
-            for kp in kp_list:
-                kp_id = uuid.uuid4().hex
-                await session.run(
-                    """
-                    CREATE (kp:KP {
-                        id: $id,
-                        name: $name,
-                        course_id: $course_id,
-                        difficulty: $difficulty,
-                        tags: $tags
-                    })
-                    """,
-                    id=kp_id,
-                    name=kp.get("name", ""),
-                    course_id=course_id,
-                    difficulty=kp.get("difficulty", 1),
-                    tags=json.dumps(kp.get("tags", [])),
-                )
+        # Fallback: derive KP from filename if LLM extraction empty
+        if not kp_list:
+            stem = filename.rsplit(".", 1)[0].strip()
+            if stem:
+                kp_list = [{"name": stem[:40], "difficulty": 2, "tags": ["document"]}]
+
+        # 6. Create knowledge points in PostgreSQL (authoritative) and Neo4j
+        from app.database import async_session as AsyncSessionLocal
+        from app.models.knowledge_point import KnowledgePoint as KPModel
+        import uuid as _uuid
+
+        created_count = 0
+        async with AsyncSessionLocal() as db:
+            try:
+                course_uuid = _uuid.UUID(course_id)
+            except ValueError:
+                course_uuid = None
+
+            if course_uuid:
+                for kp in kp_list:
+                    name = str(kp.get("name", "")).strip()
+                    if not name:
+                        continue
+                    pg_kp = KPModel(
+                        id=_uuid.uuid4(),
+                        name=name[:500],
+                        course_id=course_uuid,
+                        difficulty=int(kp.get("difficulty", 1) or 1),
+                        tags={"tags": kp.get("tags", []), "source": filename},
+                    )
+                    db.add(pg_kp)
+                    created_count += 1
+                try:
+                    await db.commit()
+                except Exception as e:
+                    logger.warning(f"Failed to commit KPs to PostgreSQL: {e}")
+                    await db.rollback()
+
+        # Best-effort Neo4j mirror (non-fatal)
+        try:
+            async with self.neo4j.session() as session:
+                for kp in kp_list:
+                    name = str(kp.get("name", "")).strip()
+                    if not name:
+                        continue
+                    kp_id = _uuid.uuid4().hex
+                    await session.run(
+                        """
+                        CREATE (kp:KP {
+                            id: $id, name: $name, course_id: $course_id,
+                            difficulty: $difficulty, tags: $tags
+                        })
+                        """,
+                        id=kp_id,
+                        name=name,
+                        course_id=course_id,
+                        difficulty=int(kp.get("difficulty", 1) or 1),
+                        tags=json.dumps(kp.get("tags", [])),
+                    )
+        except Exception as e:
+            logger.warning(f"Neo4j KP mirror failed: {e}")
 
         return {
             "document_id": doc_id,
             "chunk_count": len(chunk_texts),
-            "knowledge_points_extracted": len(kp_list),
+            "knowledge_points_extracted": created_count,
         }
 
     # ── search ───────────────────────────────────────────────────
@@ -273,66 +339,67 @@ class KnowledgeService:
         self,
         course_id: str | None = None,
     ) -> dict[str, Any]:
-        """Return knowledge graph as {nodes, edges} for visualization."""
-        if course_id:
-            query = (
-                "MATCH (n:KP {course_id: $cid}) "
-                "OPTIONAL MATCH (n)-[r]->(m) "
-                "RETURN n, r, m"
-            )
-            params: dict = {"cid": course_id}
-        else:
-            query = "MATCH (n:KP) OPTIONAL MATCH (n)-[r]->(m) RETURN n, r, m"
-            params = {}
+        """Return knowledge graph as {nodes, edges} for visualization.
+
+        Primary source: PostgreSQL `knowledge_points` table (always populated
+        by seed data and upload pipeline). Neo4j is used to enrich with edges
+        when available.
+        """
+        from sqlalchemy import select
+        from app.database import async_session as AsyncSessionLocal
+        from app.models.knowledge_point import KnowledgePoint as KPModel
 
         nodes_map: dict[str, dict] = {}
         edges: list[dict] = []
 
-        async with self.neo4j.session() as session:
-            result = await session.run(query, **params)
-            records = await result.data()
+        # 1. Load KP nodes from PostgreSQL (authoritative)
+        async with AsyncSessionLocal() as db:
+            stmt = select(KPModel)
+            if course_id:
+                import uuid as _uuid
+                try:
+                    course_uuid = _uuid.UUID(course_id)
+                    stmt = stmt.where(KPModel.course_id == course_uuid)
+                except ValueError:
+                    pass
+            result = await db.execute(stmt)
+            for kp in result.scalars().all():
+                nid = str(kp.id)
+                nodes_map[nid] = {
+                    "id": nid,
+                    "name": kp.name,
+                    "course_id": str(kp.course_id),
+                    "difficulty": kp.difficulty,
+                    "group": str(kp.course_id),
+                }
 
-            for record in records:
-                n = record.get("n")
-                r = record.get("r")
-                m = record.get("m")
-
-                if n and isinstance(n, dict):
-                    nid = n.get("id", "")
-                    if nid and nid not in nodes_map:
-                        nodes_map[nid] = {
-                            "id": nid,
-                            "name": n.get("name", ""),
-                            "course_id": n.get("course_id", ""),
-                            "difficulty": n.get("difficulty", 1),
-                            "group": n.get("course_id", "default"),
-                        }
-
-                if m and isinstance(m, dict):
-                    mid = m.get("id", "")
-                    if mid and mid not in nodes_map:
-                        nodes_map[mid] = {
-                            "id": mid,
-                            "name": m.get("name", ""),
-                            "course_id": m.get("course_id", ""),
-                            "difficulty": m.get("difficulty", 1),
-                            "group": m.get("course_id", "default"),
-                        }
-
-                if r is not None and n and m:
-                    # r is returned as a list [start_id, type, props, end_id] or dict
-                    edge_type = "RELATED"
-                    if isinstance(r, tuple) and len(r) >= 2:
-                        edge_type = str(r[1])
-                    elif isinstance(r, dict) and "type" in r:
-                        edge_type = r["type"]
-                    edges.append(
-                        {
-                            "source": n.get("id", ""),
-                            "target": m.get("id", ""),
-                            "type": edge_type,
-                        }
-                    )
+        # 2. Enrich with Neo4j edges if the KPs also exist there
+        try:
+            if course_id:
+                neo_query = (
+                    "MATCH (n:KP {course_id: $cid})-[r]->(m:KP) "
+                    "RETURN n.id AS source, m.id AS target, type(r) AS type"
+                )
+                params: dict = {"cid": course_id}
+            else:
+                neo_query = (
+                    "MATCH (n:KP)-[r]->(m:KP) "
+                    "RETURN n.id AS source, m.id AS target, type(r) AS type"
+                )
+                params = {}
+            async with self.neo4j.session() as session:
+                res = await session.run(neo_query, **params)
+                async for rec in res:
+                    source = rec.get("source")
+                    target = rec.get("target")
+                    if source and target:
+                        edges.append({
+                            "source": source,
+                            "target": target,
+                            "type": rec.get("type") or "RELATED",
+                        })
+        except Exception as e:
+            logger.warning(f"Neo4j enrichment failed: {e}")
 
         return {"nodes": list(nodes_map.values()), "edges": edges}
 
