@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import uuid
 from typing import Any
 
@@ -257,7 +258,6 @@ class KnowledgeService:
 
         # Fallback: extract most frequent meaningful words as KP names
         if not kp_list:
-            import re
             from collections import Counter
             # Pick words 4+ chars, lowercase, ignore stopwords
             stop = {
