@@ -89,13 +89,38 @@ class QAAgent(BaseAgent):
             sources = []
 
         # ── Step 3: Stream LLM response ──────────────────────────────
-        if results:
+        # Per-course Agent config (system_prompt + model + temperature)
+        agent_cfg = None
+        try:
+            from app.api.agents import get_active_agent
+
+            if ctx.db_session is not None and ctx.course_id:
+                agent_cfg = await get_active_agent(ctx.db_session, ctx.course_id, "qa")
+        except Exception:
+            logger.exception("QA Agent: failed to load per-course config")
+
+        if agent_cfg and agent_cfg.status == "stopped":
+            yield TextDelta(
+                content="该课程的答疑 Agent 当前已停用，请联系教师启用后再试。"
+            )
+            return
+
+        if agent_cfg and agent_cfg.system_prompt:
+            base_prompt = agent_cfg.system_prompt
+            # Still inject RAG context if we have it
+            if results:
+                system_prompt = (
+                    f"{base_prompt}\n\n参考资料:\n{context_text}\n\n"
+                    f"跨课程关联知识点:\n{cross_hints_text}"
+                )
+            else:
+                system_prompt = base_prompt
+        elif results:
             system_prompt = _QA_SYSTEM_PROMPT_WITH_RAG.format(
                 context=context_text,
                 cross_hints=cross_hints_text,
             )
         else:
-            # No RAG data — use general teaching mode
             system_prompt = _QA_SYSTEM_PROMPT_GENERAL
 
         yield Thinking(stage="generating_answer")
@@ -106,6 +131,8 @@ class QAAgent(BaseAgent):
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": message},
                 ],
+                model=agent_cfg.model if agent_cfg else None,
+                temperature=agent_cfg.temperature if agent_cfg else None,
             ):
                 yield TextDelta(content=chunk)
         except Exception:
