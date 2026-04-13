@@ -169,23 +169,28 @@ async def list_my_submissions(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Return the authenticated student's submissions across all assignments.
+    """Return submissions scoped to the authenticated user.
 
-    Requires a valid JWT.  Joins Submission -> Assignment -> Course to
-    include the assignment title and course name.
-    """
+    For a student: their own submissions across every course they are
+    enrolled in. For a teacher: every student submission in the courses
+    they teach (used by the teacher's grading queue)."""
     stmt = (
         select(
             Submission,
             Assignment.title.label("assignment_title"),
             Assignment.due_date.label("due_date"),
             Course.name.label("course_name"),
+            User.name.label("student_name"),
         )
         .join(Assignment, Submission.assignment_id == Assignment.id)
         .join(Course, Assignment.course_id == Course.id)
-        .where(Submission.student_id == current_user.id)
+        .join(User, Submission.student_id == User.id)
         .order_by(Submission.created_at.desc())
     )
+    if current_user.role == "teacher":
+        stmt = stmt.where(Course.teacher_id == current_user.id)
+    else:
+        stmt = stmt.where(Submission.student_id == current_user.id)
     result = await db.execute(stmt)
     rows = result.all()
 
@@ -195,6 +200,9 @@ async def list_my_submissions(
             "assignment_id": str(row.Submission.assignment_id),
             "assignment_title": row.assignment_title,
             "course_name": row.course_name,
+            "student_id": str(row.Submission.student_id),
+            "student_name": row.student_name,
+            "student_avatar": (row.student_name or "?")[0],
             "status": row.Submission.status,
             "score": row.Submission.score,
             "submitted_at": row.Submission.created_at.isoformat(),

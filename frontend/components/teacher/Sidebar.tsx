@@ -3,7 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
+import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
+import { apiFetch } from "@/lib/api";
+import { fetchCourses } from "@/lib/queries";
+import type { WarningStudent } from "@/lib/queries";
 
 interface NavItem {
   href: string;
@@ -14,45 +18,44 @@ interface NavItem {
   children?: { href: string; label: string }[];
 }
 
-const navItems: NavItem[] = [
-  {
-    href: "/teacher/dashboard",
-    icon: "ri-dashboard-3-line",
-    label: "仪表盘",
-  },
-  {
-    href: "/teacher/courses",
-    icon: "ri-book-open-line",
-    label: "课程管理",
-    children: [
-      { href: "/teacher/courses", label: "全部课程" },
-    ],
-  },
-  {
-    href: "/teacher/agents",
-    icon: "ri-robot-2-line",
-    label: "Agent 配置",
-  },
-  {
-    href: "/teacher/grading",
-    icon: "ri-file-check-line",
-    label: "批改队列",
-    badge: 12,
-    badgeColor: "bg-ink-primary",
-  },
-  {
-    href: "/teacher/warnings",
-    icon: "ri-alarm-warning-line",
-    label: "预警中心",
-    badge: 3,
-    badgeColor: "bg-ink-error",
-  },
-  {
-    href: "/teacher/settings",
-    icon: "ri-settings-3-line",
-    label: "设置",
-  },
-];
+function useTeacherBadges() {
+  const { data: pendingCount } = useQuery({
+    queryKey: ["sidebar-pending"],
+    queryFn: async () => {
+      const subs = await apiFetch<{ status: string }[]>("/api/submissions/mine");
+      return subs.filter((s) => s.status === "pending" || s.status === "submitted").length;
+    },
+    refetchInterval: 30_000,
+  });
+
+  const { data: warningCount } = useQuery({
+    queryKey: ["sidebar-warnings"],
+    queryFn: async () => {
+      const courses = await fetchCourses();
+      const all = await Promise.all(
+        courses.map((c) =>
+          apiFetch<{ warnings: WarningStudent[] }>(
+            `/api/analytics/warnings/${c.id}?threshold=0.5`,
+          )
+            .then((r) => r.warnings)
+            .catch(() => [] as WarningStudent[]),
+        ),
+      );
+      const seen = new Set<string>();
+      let count = 0;
+      for (const w of all.flat()) {
+        if (w.risk_level === "high" && !seen.has(w.id)) {
+          seen.add(w.id);
+          count += 1;
+        }
+      }
+      return count;
+    },
+    refetchInterval: 60_000,
+  });
+
+  return { pendingCount: pendingCount ?? 0, warningCount: warningCount ?? 0 };
+}
 
 function SidebarItem({ item }: { item: NavItem }) {
   const pathname = usePathname();
@@ -95,6 +98,44 @@ function SidebarItem({ item }: { item: NavItem }) {
 }
 
 export default function Sidebar() {
+  const { pendingCount, warningCount } = useTeacherBadges();
+  const navItems: NavItem[] = [
+    {
+      href: "/teacher/dashboard",
+      icon: "ri-dashboard-3-line",
+      label: "仪表盘",
+    },
+    {
+      href: "/teacher/courses",
+      icon: "ri-book-open-line",
+      label: "课程管理",
+      children: [{ href: "/teacher/courses", label: "全部课程" }],
+    },
+    {
+      href: "/teacher/agents",
+      icon: "ri-robot-2-line",
+      label: "Agent 配置",
+    },
+    {
+      href: "/teacher/grading",
+      icon: "ri-file-check-line",
+      label: "批改队列",
+      badge: pendingCount,
+      badgeColor: "bg-ink-primary",
+    },
+    {
+      href: "/teacher/warnings",
+      icon: "ri-alarm-warning-line",
+      label: "预警中心",
+      badge: warningCount,
+      badgeColor: "bg-ink-error",
+    },
+    {
+      href: "/teacher/settings",
+      icon: "ri-settings-3-line",
+      label: "设置",
+    },
+  ];
   return (
     <motion.aside
       initial={{ x: -20, opacity: 0 }}

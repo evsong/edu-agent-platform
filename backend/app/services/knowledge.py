@@ -278,12 +278,21 @@ class KnowledgeService:
                     for w, c in top
                 ]
             else:
-                stem = filename.rsplit(".", 1)[0].strip()
-                kp_list = [{"name": stem[:40], "difficulty": 2, "tags": ["document"]}]
+                # No real KPs to extract — don't fabricate one from the
+                # filename. A document with nothing extractable shouldn't
+                # pollute the graph with a pseudo-KP named after the file.
+                logger.warning(
+                    f"KP extraction produced no results for {filename}; "
+                    "skipping KP creation"
+                )
+                kp_list = []
         _report("extracting_kp", 1, 1)
 
         # 7. Create knowledge points in PostgreSQL (linked to document) + Neo4j
         from app.models.knowledge_point import KnowledgePoint as KPModel
+
+        # Guard against junk KP names: UUIDs, filenames, pure punctuation.
+        _uuid_re = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE)
 
         created_count = 0
         if course_uuid:
@@ -291,6 +300,9 @@ class KnowledgeService:
                 for kp in kp_list:
                     name = str(kp.get("name", "")).strip()
                     if not name:
+                        continue
+                    if _uuid_re.match(name) or name.endswith("教材") or name.endswith(".pdf"):
+                        logger.warning(f"Skipping junk KP name: {name!r}")
                         continue
                     pg_kp = KPModel(
                         id=_uuid.uuid4(),
