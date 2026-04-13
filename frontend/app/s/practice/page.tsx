@@ -263,7 +263,13 @@ export default function PracticePage() {
       });
     },
     onError: () => {
-      // API failed — just increment count, next exercise will be fetched on retry
+      // API failed — still reveal the next-button path so the student can proceed
+      setLastResult({
+        is_correct: false,
+        correct_answer: currentExercise?.correct_answer ?? "",
+        explanation: currentExercise?.explanation ?? "提交失败，可跳过此题",
+      });
+      setShowResult(true);
       setAnsweredCount((c) => c + 1);
     },
   });

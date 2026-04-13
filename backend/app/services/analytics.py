@@ -554,14 +554,36 @@ class AnalyticsService:
             logger.exception("LLM exercise generation failed")
             return None
 
+        difficulty_int = {"basic": 1, "intermediate": 2, "advanced": 3}.get(difficulty, 1)
+
+        # Persist the generated exercise so it has a real UUID and can be answered.
+        try:
+            kp_uuid_for_persist = uuid.UUID(weakest_kp_id) if weakest_kp_id else None
+        except (ValueError, TypeError):
+            kp_uuid_for_persist = None
+
+        persisted = Exercise(
+            course_id=course_id,
+            knowledge_point_id=kp_uuid_for_persist,
+            question=generated.get("question", ""),
+            options=generated.get("options"),
+            answer=generated.get("answer"),
+            difficulty=difficulty_int,
+            explanation=generated.get("explanation"),
+        )
+        db.add(persisted)
+        await db.commit()
+        await db.refresh(persisted)
+
         return {
-            "id": None,
+            "id": str(persisted.id),
             "course_id": str(course_id),
             "knowledge_point_id": weakest_kp_id,
-            "question": generated.get("question", ""),
-            "options": generated.get("options"),
-            "difficulty": {"basic": 1, "intermediate": 2, "advanced": 3}.get(difficulty, 1),
-            "explanation": generated.get("explanation"),
+            "question": persisted.question,
+            "options": persisted.options,
+            "difficulty": persisted.difficulty,
+            "explanation": persisted.explanation,
             "source": "generated",
-            "answer": generated.get("answer"),
+            "answer": persisted.answer,
+            "correct_answer": persisted.answer,
         }
