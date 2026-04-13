@@ -85,24 +85,40 @@ class KnowledgeService:
         content: str,
         file_size: int = 0,
         allowed_student_ids: list[str] | None = None,
+        progress_cb: Any = None,
     ) -> dict[str, Any]:
         """Chunk, embed, store in Milvus, then extract KPs into Neo4j.
 
         If allowed_student_ids is provided (non-empty list), only those
         students will be able to access this document. Empty list or
         None means all students in the course can access.
+
+        progress_cb(stage: str, current: int, total: int) is called at
+        each major step so the caller can update an external task log.
         """
 
         import asyncio
 
+        def _report(stage: str, current: int, total: int):
+            if progress_cb:
+                try:
+                    progress_cb(stage, current, total)
+                except Exception:
+                    pass
+
         # 1. Split content into chunks (run in thread - can be slow for huge files)
+        _report("splitting", 0, 1)
         chunks = await asyncio.to_thread(self._splitter.create_documents, [content])
         chunk_texts = [c.page_content for c in chunks]
         if not chunk_texts:
             return {"document_id": None, "chunk_count": 0, "knowledge_points_extracted": 0}
+        _report("splitting", 1, 1)
 
         # 2. Embed all chunks (already async with to_thread inside)
+        total_chunks = len(chunk_texts)
+        _report("embedding", 0, total_chunks)
         vectors = await self.llm.embed(chunk_texts)
+        _report("embedding", total_chunks, total_chunks)
 
         # 3. Ensure Milvus collection exists (sync call in thread)
         col_name = self._collection_name(course_id)
@@ -139,7 +155,7 @@ class KnowledgeService:
                     logger.warning(f"Failed to create Document row: {e}")
                     await db.rollback()
 
-        # 5. Insert chunks + vectors into Milvus
+        # 5. Insert chunks + vectors into Milvus (batch for progress reports)
         rows = [
             {
                 "id": f"{doc_id}_{i}",
@@ -149,11 +165,18 @@ class KnowledgeService:
             }
             for i in range(len(chunk_texts))
         ]
-        await asyncio.to_thread(
-            self.milvus.insert, collection_name=col_name, data=rows
-        )
+        _report("inserting", 0, total_chunks)
+        # Insert in batches of 500 so we can report progress
+        BATCH = 500
+        for start in range(0, len(rows), BATCH):
+            batch = rows[start:start + BATCH]
+            await asyncio.to_thread(
+                self.milvus.insert, collection_name=col_name, data=batch
+            )
+            _report("inserting", min(start + BATCH, total_chunks), total_chunks)
 
-        # 5. Extract knowledge points via LLM (best effort)
+        # 6. Extract knowledge points via LLM (best effort)
+        _report("extracting_kp", 0, 1)
         extraction_prompt = (
             "You are extracting knowledge points from an educational document. "
             "Return a JSON object with a single key 'knowledge_points' mapping to "
@@ -206,6 +229,7 @@ class KnowledgeService:
             stem = filename.rsplit(".", 1)[0].strip()
             if stem:
                 kp_list = [{"name": stem[:40], "difficulty": 2, "tags": ["document"]}]
+        _report("extracting_kp", 1, 1)
 
         # 7. Create knowledge points in PostgreSQL (linked to document) + Neo4j
         from app.models.knowledge_point import KnowledgePoint as KPModel

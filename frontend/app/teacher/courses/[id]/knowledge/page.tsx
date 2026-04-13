@@ -13,12 +13,20 @@ import {
 import type { KnowledgeDocument, KnowledgeGraphData } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
+interface BackendProgress {
+  stage?: string;
+  label?: string;
+  current?: number;
+  total?: number;
+}
+
 interface UploadTask {
   id: string;
   filename: string;
   status: "uploading" | "queued" | "extracting" | "indexing" | "completed" | "error";
   progress?: string; // "3/5" chunks uploaded, or status detail
   uploadPct?: number; // 0-100 for chunk upload progress
+  serverProgress?: BackendProgress; // backend-reported fine-grained progress
 }
 
 const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB per chunk
@@ -91,21 +99,27 @@ export default function KnowledgeBasePage({
           headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
         });
         if (!res.ok) throw new Error("status fetch failed");
-        const status = await res.json() as { status: string; message?: string };
+        const status = await res.json() as {
+          status: string;
+          message?: string;
+          progress?: BackendProgress;
+        };
         setUploads(prev => prev.map(u => u.id === localId ? {
           ...u,
           status: status.status as UploadTask["status"],
           progress: status.message,
+          serverProgress: status.progress,
         } : u));
         if (status.status === "completed" || status.status === "error") {
           clearInterval(interval);
           queryClient.invalidateQueries({ queryKey: ["knowledge-docs"] });
+          queryClient.invalidateQueries({ queryKey: ["knowledge-graph"] });
         }
       } catch {
         clearInterval(interval);
         setUploads(prev => prev.map(u => u.id === localId ? { ...u, status: "error" } : u));
       }
-    }, 3000);
+    }, 2000);
   }, [queryClient]);
 
   const uploadChunked = useCallback(async (file: File, localId: string, studentIds: string[]): Promise<string | null> => {
@@ -390,27 +404,63 @@ export default function KnowledgeBasePage({
       {uploads.length > 0 && (
         <div className="space-y-2">
           {uploads.map(u => {
+            // Compute server progress percentage if available
+            const sp = u.serverProgress;
+            const serverPct =
+              sp && sp.total && sp.total > 0
+                ? Math.round(((sp.current ?? 0) / sp.total) * 100)
+                : null;
+
             const statusLabel =
-              u.status === "uploading" ? `上传中 ${u.uploadPct ?? 0}%${u.progress ? ` · ${u.progress}` : ""}` :
-              u.status === "queued" ? "已入队，等待处理" :
-              u.status === "extracting" ? "提取文本中..." :
-              u.status === "indexing" ? "建立索引中..." :
-              u.status === "completed" ? "导入完成" : "导入失败";
+              u.status === "uploading"
+                ? `上传中 ${u.uploadPct ?? 0}%${u.progress ? ` · ${u.progress}` : ""}`
+                : u.status === "queued"
+                  ? "已入队，等待处理"
+                  : u.status === "extracting"
+                    ? sp?.label
+                      ? `${sp.label}${sp.total ? ` ${sp.current}/${sp.total}` : ""}`
+                      : "提取文本中..."
+                    : u.status === "indexing"
+                      ? sp?.label
+                        ? `${sp.label} ${sp.current ?? 0}/${sp.total ?? 0}${serverPct !== null ? ` · ${serverPct}%` : ""}`
+                        : "建立索引中..."
+                      : u.status === "completed"
+                        ? "导入完成"
+                        : "导入失败";
             const icon =
-              u.status === "completed" ? "ri-checkbox-circle-fill text-ink-success" :
-              u.status === "error" ? "ri-error-warning-fill text-ink-error" :
-              "ri-loader-4-line animate-spin text-ink-primary";
-            const showBar = u.status === "uploading" && u.uploadPct !== undefined;
+              u.status === "completed"
+                ? "ri-checkbox-circle-fill text-ink-success"
+                : u.status === "error"
+                  ? "ri-error-warning-fill text-ink-error"
+                  : "ri-loader-4-line animate-spin text-ink-primary";
+
+            // Which progress bar to show
+            const uploadingBar = u.status === "uploading" && u.uploadPct !== undefined;
+            const serverBar =
+              (u.status === "indexing" || u.status === "extracting") &&
+              serverPct !== null;
+
             return (
-              <div key={u.id} className="flex items-center gap-3 rounded-lg border border-ink-border bg-white p-3">
+              <div
+                key={u.id}
+                className="flex items-center gap-3 rounded-lg border border-ink-border bg-white p-3"
+              >
                 <i className={icon} />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-ink-text truncate">{u.filename}</p>
+                  <p className="text-sm font-medium text-ink-text truncate">
+                    {u.filename}
+                  </p>
                   <p className="text-xs text-ink-text-muted">{statusLabel}</p>
-                  {showBar && (
+                  {(uploadingBar || serverBar) && (
                     <div className="mt-1.5 h-1 w-full rounded-full bg-ink-surface overflow-hidden">
-                      <div className="h-full bg-ink-primary rounded-full transition-all"
-                           style={{ width: `${u.uploadPct}%` }} />
+                      <div
+                        className="h-full bg-ink-primary rounded-full transition-all"
+                        style={{
+                          width: uploadingBar
+                            ? `${u.uploadPct}%`
+                            : `${serverPct ?? 0}%`,
+                        }}
+                      />
                     </div>
                   )}
                 </div>

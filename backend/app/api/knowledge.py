@@ -84,6 +84,7 @@ async def _process_file_background(
     """Background task: extract content, chunk, embed, store in Milvus."""
     try:
         _upload_tasks[task_id]["status"] = "extracting"
+        _upload_tasks[task_id]["progress"] = {"stage": "extracting", "current": 0, "total": 0}
         ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "txt"
         content = await _extract_content(file_path, filename, ext)
 
@@ -97,11 +98,28 @@ async def _process_file_background(
         _upload_tasks[task_id]["status"] = "indexing"
         _upload_tasks[task_id]["content_size"] = len(content)
 
+        # Stage → human-friendly UI label
+        STAGE_LABELS = {
+            "splitting": "切分文本",
+            "embedding": "生成向量",
+            "inserting": "写入索引",
+            "extracting_kp": "提取知识点",
+        }
+
+        def _progress(stage: str, current: int, total: int):
+            _upload_tasks[task_id]["progress"] = {
+                "stage": stage,
+                "label": STAGE_LABELS.get(stage, stage),
+                "current": current,
+                "total": total,
+            }
+
         svc = _get_service()
         result = await svc.upload_document(
             course_id, filename, content,
             file_size=file_size,
             allowed_student_ids=allowed_student_ids,
+            progress_cb=_progress,
         )
         _upload_tasks[task_id].update({"status": "completed", **result})
     except Exception as e:
