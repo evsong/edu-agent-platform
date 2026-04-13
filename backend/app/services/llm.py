@@ -55,6 +55,7 @@ class LLMClient:
         *,
         json_mode: bool = False,
         model: str | None = None,
+        temperature: float | None = None,
     ) -> str:
         """Chat completion — returns the assistant text.
 
@@ -68,6 +69,8 @@ class LLMClient:
             "messages": messages,
             "stream": True,
         }
+        if temperature is not None:
+            kwargs["temperature"] = temperature
         if json_mode:
             kwargs["response_format"] = {"type": "json_object"}
 
@@ -143,14 +146,18 @@ class LLMClient:
         messages: list[dict],
         *,
         model: str | None = None,
+        temperature: float | None = None,
     ) -> AsyncGenerator[str, None]:
         """Yield text chunks from a streaming chat completion."""
         try:
-            resp = await self._client.chat.completions.create(
-                model=model or self.default_model,
-                messages=messages,
-                stream=True,
-            )
+            kwargs: dict = {
+                "model": model or self.default_model,
+                "messages": messages,
+                "stream": True,
+            }
+            if temperature is not None:
+                kwargs["temperature"] = temperature
+            resp = await self._client.chat.completions.create(**kwargs)
             async for chunk in resp:
                 delta = chunk.choices[0].delta.content
                 if delta:

@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import String, Float, ForeignKey
+from sqlalchemy import Float, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -35,7 +35,10 @@ class AgentConfig(Base):
         String(500), nullable=True
     )
     grading_rules: Mapped[str | None] = mapped_column(
-        String(500), nullable=True
+        Text, nullable=True
+    )
+    system_prompt: Mapped[str | None] = mapped_column(
+        Text, nullable=True
     )
     icon: Mapped[str | None] = mapped_column(
         String(100), nullable=True, default="ri-robot-2-line"

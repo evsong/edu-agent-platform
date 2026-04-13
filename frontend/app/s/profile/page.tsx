@@ -116,7 +116,7 @@ export default function ProfilePage() {
   const { user } = useAuth();
   const [selectedCourseId, setSelectedCourseId] = useState<string>("");
 
-  const { data: courses } = useQuery({
+  const { data: courses, isPending: coursesPending } = useQuery({
     queryKey: ["courses"],
     queryFn: fetchCourses,
   });
@@ -138,6 +138,28 @@ export default function ProfilePage() {
     },
     enabled: !!user?.id && !!selectedCourseId,
   });
+
+  if (!coursesPending && courseList.length === 0) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-heading font-bold text-ink-text">能力画像</h1>
+          <p className="mt-1 text-sm text-ink-text-muted">
+            你还没有加入任何课程
+          </p>
+        </div>
+        <div className="rounded-xl border border-dashed border-ink-border bg-white p-10 text-center">
+          <i className="ri-book-open-line text-4xl text-ink-text-light" />
+          <h3 className="mt-3 text-base font-heading font-semibold text-ink-text">
+            暂无课程数据
+          </h3>
+          <p className="mt-1 text-sm text-ink-text-muted">
+            请联系教师将你加入课程后，能力画像会自动生成
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (!profile) {
     return (

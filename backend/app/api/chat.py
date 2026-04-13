@@ -180,21 +180,40 @@ async def chat(
             graph_init_err,
         )
 
-    # ── Fallback: direct LLM call ────────────────────────────────
+    # ── Fallback: direct LLM call honoring per-course Agent config ──
+    from app.api.agents import get_active_agent
+
+    agent_cfg = await get_active_agent(db, request.course_id, "qa") if request.course_id else None
+    agent_name = agent_cfg.name if agent_cfg else "智能答疑 Agent"
+    system_prompt = (
+        agent_cfg.system_prompt
+        if agent_cfg and agent_cfg.system_prompt
+        else (
+            "你是EduAgent智能助教，专注于高等数学和大学物理的教学辅助。"
+            "请用中文回答学生的问题。回答要准确、有条理，适当使用公式。"
+        )
+    )
+    agent_model = agent_cfg.model if agent_cfg else None
+    agent_temperature = agent_cfg.temperature if agent_cfg else None
+    agent_stopped = agent_cfg.status == "stopped" if agent_cfg else False
+
     async def fallback_stream():
-        yield AgentStart(agent_id="qa", agent_name="智能答疑 Agent").to_sse()
+        yield AgentStart(agent_id="qa", agent_name=agent_name).to_sse()
+        if agent_stopped:
+            yield Error(message="该课程的答疑 Agent 当前已停用，请联系教师启用。").to_sse()
+            yield AgentEnd(agent_id="qa").to_sse()
+            yield Done(total_agents=1).to_sse()
+            return
         try:
             llm = _get_llm_client()
-            async for chunk in llm.stream([
-                {
-                    "role": "system",
-                    "content": (
-                        "你是EduAgent智能助教，专注于高等数学和大学物理的教学辅助。"
-                        "请用中文回答学生的问题。回答要准确、有条理，适当使用公式。"
-                    ),
-                },
-                {"role": "user", "content": request.message},
-            ]):
+            async for chunk in llm.stream(
+                [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": request.message},
+                ],
+                model=agent_model,
+                temperature=agent_temperature,
+            ):
                 yield TextDelta(content=chunk).to_sse()
         except Exception as llm_error:
             logger.exception("Fallback LLM call failed")

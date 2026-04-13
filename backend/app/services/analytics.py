@@ -587,19 +587,27 @@ class AnalyticsService:
         else:
             difficulty = "advanced"
 
+        # Per-course tutor Agent overrides system prompt + model + temperature
+        from app.api.agents import get_active_agent
+        tutor_cfg = await get_active_agent(db, course_id, "tutor")
+        if tutor_cfg and tutor_cfg.status == "stopped":
+            return None
+        tutor_system = (
+            tutor_cfg.system_prompt
+            if tutor_cfg and tutor_cfg.system_prompt
+            else (
+                "You are an expert exercise generator for education. "
+                "Generate a single exercise in JSON format with fields: "
+                '"question", "options" (object with keys A/B/C/D), '
+                '"answer" (correct option key), "explanation". '
+                "Respond in the same language as the knowledge point name."
+            )
+        )
+
         try:
             raw = await self.llm.chat(
                 [
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are an expert exercise generator for education. "
-                            "Generate a single exercise in JSON format with fields: "
-                            '"question", "options" (object with keys A/B/C/D), '
-                            '"answer" (correct option key), "explanation". '
-                            "Respond in the same language as the knowledge point name."
-                        ),
-                    },
+                    {"role": "system", "content": tutor_system},
                     {
                         "role": "user",
                         "content": (
@@ -608,6 +616,8 @@ class AnalyticsService:
                     },
                 ],
                 json_mode=True,
+                model=tutor_cfg.model if tutor_cfg else None,
+                temperature=tutor_cfg.temperature if tutor_cfg else None,
             )
             generated = json.loads(raw)
         except Exception:

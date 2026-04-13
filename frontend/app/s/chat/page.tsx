@@ -13,7 +13,7 @@ function ChatPageContent() {
   const urlCourseId = searchParams.get("course");
   const [selectedCourseId, setSelectedCourseId] = useState<string>("");
 
-  const { data: courses } = useQuery({
+  const { data: courses, isPending: coursesPending } = useQuery({
     queryKey: ["courses"],
     queryFn: fetchCourses,
   });
@@ -74,6 +74,16 @@ function ChatPageContent() {
       <div className="flex-1 rounded-xl border border-ink-border bg-white overflow-hidden">
         {selectedCourseId ? (
           <ChatInterface key={selectedCourseId} courseId={selectedCourseId} />
+        ) : !coursesPending && list.length === 0 ? (
+          <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
+            <i className="ri-chat-off-line text-4xl text-ink-text-light" />
+            <p className="text-base font-heading font-semibold text-ink-text">
+              你还没有加入任何课程
+            </p>
+            <p className="text-sm text-ink-text-muted">
+              请联系教师将你加入课程后即可使用 AI 助教
+            </p>
+          </div>
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-ink-text-muted">
             正在加载课程...

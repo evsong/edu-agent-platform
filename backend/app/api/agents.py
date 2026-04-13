@@ -16,6 +16,30 @@ from app.models.agent_config import AgentConfig
 router = APIRouter(prefix="/api/agents", tags=["agents"])
 
 
+async def get_active_agent(
+    db: AsyncSession,
+    course_id: uuid.UUID | str,
+    agent_id: str,
+) -> AgentConfig | None:
+    """Find the agent config for (course_id, agent_id). Returns the agent
+    regardless of status — callers decide whether to skip stopped ones.
+
+    `agent_id` examples: "qa" (chat), "grader" (AI grading), "tutor" (practice).
+    """
+    if isinstance(course_id, str):
+        try:
+            course_id = uuid.UUID(course_id)
+        except (TypeError, ValueError):
+            return None
+    result = await db.execute(
+        select(AgentConfig).where(
+            AgentConfig.course_id == course_id,
+            AgentConfig.agent_id == agent_id,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
 # ── Request / Response schemas ────────────────────────────────
 
 
@@ -27,6 +51,7 @@ class AgentConfigCreate(BaseModel):
     temperature: float = 0.3
     knowledge_base: Optional[str] = None
     grading_rules: Optional[str] = None
+    system_prompt: Optional[str] = None
     icon: Optional[str] = "ri-robot-2-line"
 
 
@@ -38,6 +63,7 @@ class AgentConfigUpdate(BaseModel):
     temperature: Optional[float] = None
     knowledge_base: Optional[str] = None
     grading_rules: Optional[str] = None
+    system_prompt: Optional[str] = None
     icon: Optional[str] = None
     status: Optional[str] = None
 
@@ -58,6 +84,7 @@ def _serialize(agent: AgentConfig) -> dict:
         "temperature": agent.temperature,
         "knowledge_base": agent.knowledge_base,
         "grading_rules": agent.grading_rules,
+        "system_prompt": agent.system_prompt,
         "icon": agent.icon,
     }
 

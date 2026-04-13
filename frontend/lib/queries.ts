@@ -92,14 +92,16 @@ export interface Course {
 
 export interface AgentConfig {
   id: string;
+  agent_id: string;
   name: string;
   course_id: string;
-  course_name: string;
+  course_name: string | null;
   status: "running" | "configuring" | "stopped";
   model: string;
   temperature: number;
-  knowledge_base: string;
-  grading_rules: string;
+  knowledge_base: string | null;
+  grading_rules: string | null;
+  system_prompt: string | null;
   icon: string;
 }
 

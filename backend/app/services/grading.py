@@ -154,13 +154,33 @@ class GradingService:
                 "improvements": [],
             }
 
-        # Fetch rules from DB if not provided
-        if rules is None:
+        # Fetch rules from DB if not provided. If the course has a per-course
+        # grader Agent, its grading_rules text takes precedence over the
+        # assignment-level rules.
+        from app.api.agents import get_active_agent
+
+        agent_cfg = await get_active_agent(db, course_id, "grader")
+        if agent_cfg and agent_cfg.status == "stopped":
+            return {
+                "annotations": [],
+                "overall_score": 0,
+                "summary": "该课程的批改 Agent 已停用，请教师启用后重试。",
+                "strengths": [],
+                "improvements": [],
+            }
+        if agent_cfg and agent_cfg.grading_rules:
+            rules = {"text": agent_cfg.grading_rules}
+        elif rules is None:
             rules = await self.get_grading_rules(course_id, db)
 
-        # Stage 2 — LLM call
+        # Stage 2 — LLM call (per-course model + temperature if configured)
         messages = build_grading_prompt(paragraphs, rules, content_type=content_type)
-        raw_response = await self.llm.chat(messages, json_mode=True)
+        raw_response = await self.llm.chat(
+            messages,
+            json_mode=True,
+            model=agent_cfg.model if agent_cfg else None,
+            temperature=agent_cfg.temperature if agent_cfg else None,
+        )
 
         try:
             result = json.loads(raw_response)

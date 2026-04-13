@@ -8,57 +8,6 @@ import { fetchAgents, fetchCourses } from "@/lib/queries";
 import type { AgentConfig } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
-const mockAgents: AgentConfig[] = [
-  {
-    id: "agent-1",
-    name: "数学答疑助手",
-    course_id: "math-101",
-    course_name: "高等数学 A",
-    status: "running",
-    model: "Claude 4 Sonnet",
-    temperature: 0.3,
-    knowledge_base: "高等数学知识库 (24 知识点)",
-    grading_rules: "严格模式 - 步骤评分",
-    icon: "ri-calculator-line",
-  },
-  {
-    id: "agent-2",
-    name: "物理实验指导",
-    course_id: "physics-201",
-    course_name: "大学物理 II",
-    status: "running",
-    model: "Claude 4 Sonnet",
-    temperature: 0.5,
-    knowledge_base: "大学物理知识库 (18 知识点)",
-    grading_rules: "宽松模式 - 结果评分",
-    icon: "ri-flask-line",
-  },
-  {
-    id: "agent-3",
-    name: "算法题解析",
-    course_id: "cs-301",
-    course_name: "数据结构与算法",
-    status: "configuring",
-    model: "GPT-5",
-    temperature: 0.2,
-    knowledge_base: "配置中...",
-    grading_rules: "代码评审模式",
-    icon: "ri-code-s-slash-line",
-  },
-  {
-    id: "agent-4",
-    name: "统计学辅导",
-    course_id: "stat-102",
-    course_name: "概率论与数理统计",
-    status: "stopped",
-    model: "Claude 4 Sonnet",
-    temperature: 0.4,
-    knowledge_base: "概率论知识库 (12 知识点)",
-    grading_rules: "标准模式",
-    icon: "ri-pie-chart-line",
-  },
-];
-
 const statusConfig = {
   running: {
     label: "运行中",
@@ -96,14 +45,15 @@ interface EditForm {
   temperature: number;
   knowledge_base: string;
   grading_rules: string;
+  system_prompt: string;
 }
 
 export default function AgentsPage() {
   const queryClient = useQueryClient();
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<EditForm>({ model: "", temperature: 0.3, knowledge_base: "", grading_rules: "" });
+  const [editForm, setEditForm] = useState<EditForm>({ model: "", temperature: 0.3, knowledge_base: "", grading_rules: "", system_prompt: "" });
   const [showCreate, setShowCreate] = useState(false);
-  const [createForm, setCreateForm] = useState({ name: "", course_id: "", agent_id: "qa", model: "GPT-5.4", temperature: 0.3, knowledge_base: "", grading_rules: "", icon: "ri-robot-2-line" });
+  const [createForm, setCreateForm] = useState({ name: "", course_id: "", agent_id: "qa", model: "GPT-5.4", temperature: 0.3, knowledge_base: "", grading_rules: "", system_prompt: "", icon: "ri-robot-2-line" });
 
   const { data: agents } = useQuery({
     queryKey: ["agents"],
@@ -136,7 +86,7 @@ export default function AgentsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["agents"] });
       setShowCreate(false);
-      setCreateForm({ name: "", course_id: "", agent_id: "qa", model: "GPT-5.4", temperature: 0.3, knowledge_base: "", grading_rules: "", icon: "ri-robot-2-line" });
+      setCreateForm({ name: "", course_id: "", agent_id: "qa", model: "GPT-5.4", temperature: 0.3, knowledge_base: "", grading_rules: "", system_prompt: "", icon: "ri-robot-2-line" });
     },
   });
 
@@ -150,7 +100,13 @@ export default function AgentsPage() {
 
   const startEdit = (agent: AgentConfig) => {
     setEditingId(agent.id);
-    setEditForm({ model: agent.model, temperature: agent.temperature, knowledge_base: agent.knowledge_base, grading_rules: agent.grading_rules });
+    setEditForm({
+      model: agent.model,
+      temperature: agent.temperature,
+      knowledge_base: agent.knowledge_base ?? "",
+      grading_rules: agent.grading_rules ?? "",
+      system_prompt: agent.system_prompt ?? "",
+    });
   };
 
   return (
@@ -213,6 +169,16 @@ export default function AgentsPage() {
                 </select>
               </div>
             </div>
+            <div className="mt-3">
+              <label className="text-[10px] font-medium text-ink-text-light uppercase">系统 Prompt（可选 — 决定 Agent 回答风格 / 评分尺度）</label>
+              <textarea
+                rows={3}
+                className="mt-1 w-full rounded-lg border border-ink-border px-3 py-1.5 text-sm font-mono"
+                value={createForm.system_prompt}
+                onChange={(e) => setCreateForm((f) => ({ ...f, system_prompt: e.target.value }))}
+                placeholder="例如：你是软件工程课程的助教，回答时要引用 Sommerville 教材的具体章节。"
+              />
+            </div>
             <button
               onClick={() => createForm.name && createForm.course_id && createMutation.mutate(createForm)}
               disabled={!createForm.name || !createForm.course_id || createMutation.isPending}
@@ -223,6 +189,18 @@ export default function AgentsPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {list.length === 0 && !showCreate && (
+        <div className="rounded-xl border border-dashed border-ink-border bg-white p-10 text-center">
+          <i className="ri-robot-2-line text-4xl text-ink-text-light" />
+          <h3 className="mt-3 text-base font-heading font-semibold text-ink-text">
+            还没有任何 Agent
+          </h3>
+          <p className="mt-1 text-sm text-ink-text-muted">
+            点击右上角 "新建 Agent" 为某门课程创建答疑 / 批改 / 出题 Agent
+          </p>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {list.map((agent) => {
@@ -367,6 +345,16 @@ export default function AgentsPage() {
                         <label className="text-[10px] font-medium text-ink-text-light uppercase">评分规则</label>
                         <input className="mt-1 w-full rounded-lg border border-ink-border bg-white px-2 py-1 text-xs" value={editForm.grading_rules} onChange={(e) => setEditForm((f) => ({ ...f, grading_rules: e.target.value }))} />
                       </div>
+                    </div>
+                    <div className="mt-2">
+                      <label className="text-[10px] font-medium text-ink-text-light uppercase">系统 Prompt（决定 Agent 回答风格）</label>
+                      <textarea
+                        rows={3}
+                        className="mt-1 w-full rounded-lg border border-ink-border bg-white px-2 py-1.5 text-xs font-mono"
+                        value={editForm.system_prompt}
+                        onChange={(e) => setEditForm((f) => ({ ...f, system_prompt: e.target.value }))}
+                        placeholder="例如：你是软件工程课程的 AI 助教，使用结构化讲解，举例时基于 Sommerville 教材..."
+                      />
                     </div>
                     <button
                       onClick={() => updateMutation.mutate({ id: agent.id, data: editForm })}

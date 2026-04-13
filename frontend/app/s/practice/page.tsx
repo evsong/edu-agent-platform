@@ -172,7 +172,7 @@ export default function PracticePage() {
   const [selectedKpId, setSelectedKpId] = useState<string>("");
 
   /* ── Fetch enrolled courses ── */
-  const { data: coursesData } = useQuery({
+  const { data: coursesData, isPending: coursesPending } = useQuery({
     queryKey: ["courses"],
     queryFn: fetchCourses,
   });
@@ -302,6 +302,28 @@ export default function PracticePage() {
   const currentKP = knowledgePoints.find(
     (kp) => kp.name === currentExercise?.knowledge_point,
   );
+
+  if (!coursesPending && courses.length === 0) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-heading font-bold text-ink-text">智能练习</h1>
+          <p className="mt-1 text-sm text-ink-text-muted">
+            你还没有加入任何课程
+          </p>
+        </div>
+        <div className="rounded-xl border border-dashed border-ink-border bg-white p-10 text-center">
+          <i className="ri-book-open-line text-4xl text-ink-text-light" />
+          <h3 className="mt-3 text-base font-heading font-semibold text-ink-text">
+            暂无可练习的课程
+          </h3>
+          <p className="mt-1 text-sm text-ink-text-muted">
+            请联系教师将你加入课程后即可开始练习
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <motion.div
