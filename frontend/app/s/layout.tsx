@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -129,6 +130,7 @@ export default function StudentLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const router = useRouter();
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -143,13 +145,20 @@ export default function StudentLayout({
   );
 
   // Bust browser bfcache: when restoring from history, force a fresh load.
+  // Bust Next.js Router Cache on browser back/forward by calling router.refresh()
+  // — needed because Next.js App Router restores RSC payloads from memory.
   useEffect(() => {
     const onPageShow = (e: PageTransitionEvent) => {
       if (e.persisted) window.location.reload();
     };
+    const onPopState = () => router.refresh();
     window.addEventListener("pageshow", onPageShow);
-    return () => window.removeEventListener("pageshow", onPageShow);
-  }, []);
+    window.addEventListener("popstate", onPopState);
+    return () => {
+      window.removeEventListener("pageshow", onPageShow);
+      window.removeEventListener("popstate", onPopState);
+    };
+  }, [router]);
 
   return (
     <QueryClientProvider client={queryClient}>

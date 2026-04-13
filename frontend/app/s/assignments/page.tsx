@@ -171,7 +171,7 @@ interface StudentAssignmentRow {
 }
 
 export default function AssignmentsPage() {
-  const { data: assignments } = useQuery({
+  const { data: assignments, isPending } = useQuery({
     queryKey: ["student-assignments-v2"],
     queryFn: async () => {
       const data = await apiFetch<StudentAssignmentRow[]>("/api/student/assignments");
@@ -234,6 +234,19 @@ export default function AssignmentsPage() {
 
       {/* Assignment list */}
       <div className="rounded-xl border border-ink-border bg-white overflow-hidden">
+        {isPending && list.length === 0 && (
+          <div className="divide-y divide-ink-border">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="flex items-center gap-4 px-5 py-4">
+                <div className="h-10 w-10 shrink-0 rounded-lg bg-ink-surface animate-pulse" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3 w-2/3 rounded bg-ink-surface animate-pulse" />
+                  <div className="h-2 w-1/3 rounded bg-ink-surface animate-pulse" />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
         <motion.div variants={stagger} className="divide-y divide-ink-border">
           {list.map((asgn) => {
             const config = statusConfig[asgn.status];
@@ -256,7 +269,7 @@ export default function AssignmentsPage() {
                   {/* Title + course */}
                   <div className="flex-1 min-w-0">
                     <h3 className="text-sm font-medium text-ink-text truncate">
-                      {asgn.title}
+                      {asgn.title || asgn.course_name || "未命名作业"}
                     </h3>
                     <p className="mt-0.5 text-xs text-ink-text-muted">
                       {asgn.course_name}
