@@ -177,21 +177,43 @@ class KnowledgeService:
 
         # 6. Extract knowledge points via LLM (best effort)
         _report("extracting_kp", 0, 1)
+
+        # Skip front-matter (TOC, copyright, acknowledgments) by sampling from
+        # the MIDDLE of the document. Take evenly-spaced chunks and concat.
+        def _sample_chunks() -> str:
+            if len(chunk_texts) < 6:
+                return "\n\n".join(chunk_texts)
+            # Skip first 10% (TOC/copyright) and last 5% (index/bibliography)
+            lo = max(1, int(len(chunk_texts) * 0.10))
+            hi = max(lo + 1, int(len(chunk_texts) * 0.95))
+            # Sample 8 chunks across the body
+            step = max(1, (hi - lo) // 8)
+            picked = [chunk_texts[i] for i in range(lo, hi, step)][:8]
+            return "\n\n---\n\n".join(picked)
+
+        sampled_content = _sample_chunks()
         extraction_prompt = (
-            "You are extracting knowledge points from an educational document. "
-            "Return a JSON object with a single key 'knowledge_points' mapping to "
-            "an array of at least 5 and up to 15 objects. Each object has: "
-            '"name" (short Chinese or English topic name, under 20 chars), '
-            '"difficulty" (integer 1-5), "tags" (array of 1-3 short strings). '
-            "Only return valid JSON, no markdown fences, no prose."
+            "You are extracting the main KNOWLEDGE POINTS (topics/concepts) that "
+            "appear in these excerpts from an educational textbook. Return STRICT "
+            "JSON ONLY, no prose, no markdown fences. Schema:\n"
+            '{"knowledge_points": [{"name": string, "difficulty": 1-5, "tags": [string]}]}\n'
+            "Generate 5-12 concrete topics actually discussed in the text. "
+            "Name should be a noun phrase under 24 characters, in English or Chinese "
+            "matching the textbook language. difficulty 1=intro, 5=advanced. "
+            "If the excerpts are too sparse to tell, return at least 3 broad topics "
+            "based on the visible keywords."
         )
         kp_list: list[dict] = []
+        kp_raw = ""
         try:
             kp_raw = await self.llm.chat(
                 messages=[
                     {"role": "system", "content": extraction_prompt},
-                    {"role": "user", "content": content[:8000]},
+                    {"role": "user", "content": sampled_content[:12000]},
                 ],
+            )
+            logger.info(
+                f"KP raw (first 300 chars) for {filename}: {kp_raw[:300]!r}"
             )
             # Strip common wrappers: markdown code fences, prose before/after
             cleaned = kp_raw.strip()
@@ -202,16 +224,23 @@ class KnowledgeService:
                 cleaned = cleaned.strip()
                 if cleaned.endswith("```"):
                     cleaned = cleaned[:-3].strip()
-            # Locate JSON boundaries
-            start = cleaned.find("{")
-            if start >= 0:
-                cleaned = cleaned[start:]
-            end = cleaned.rfind("}")
-            if end >= 0:
-                cleaned = cleaned[:end + 1]
+            # Locate JSON boundaries — try object first, then array
+            obj_start = cleaned.find("{")
+            arr_start = cleaned.find("[")
+            if obj_start >= 0 and (arr_start < 0 or obj_start < arr_start):
+                cleaned = cleaned[obj_start:]
+                end = cleaned.rfind("}")
+                if end >= 0:
+                    cleaned = cleaned[:end + 1]
+            elif arr_start >= 0:
+                cleaned = cleaned[arr_start:]
+                end = cleaned.rfind("]")
+                if end >= 0:
+                    cleaned = cleaned[:end + 1]
+            if not cleaned:
+                raise ValueError("LLM returned empty content")
             parsed = json.loads(cleaned)
             if isinstance(parsed, dict):
-                # Accept {"knowledge_points": [...]} or first array value
                 if "knowledge_points" in parsed and isinstance(parsed["knowledge_points"], list):
                     kp_list = parsed["knowledge_points"]
                 else:
@@ -222,12 +251,34 @@ class KnowledgeService:
             elif isinstance(parsed, list):
                 kp_list = parsed
         except Exception as e:
-            logger.warning(f"KP extraction failed: {e}")
+            logger.warning(
+                f"KP extraction failed for {filename}: {e} | raw={kp_raw[:200]!r}"
+            )
 
-        # Fallback: derive KP from filename if LLM extraction empty
+        # Fallback: extract most frequent meaningful words as KP names
         if not kp_list:
-            stem = filename.rsplit(".", 1)[0].strip()
-            if stem:
+            import re
+            from collections import Counter
+            # Pick words 4+ chars, lowercase, ignore stopwords
+            stop = {
+                "the", "and", "for", "that", "this", "with", "are", "from",
+                "have", "has", "not", "will", "can", "may", "which", "these",
+                "those", "some", "more", "when", "also", "other", "such",
+                "than", "then", "they", "their", "them", "there", "been",
+                "each", "what", "its", "was", "were", "will", "how", "you",
+                "your", "our", "use", "used", "using", "chapter", "section",
+                "figure", "table", "example",
+            }
+            words = re.findall(r"[a-zA-Z]{4,}", sampled_content.lower())
+            counter = Counter(w for w in words if w not in stop)
+            top = counter.most_common(10)
+            if top:
+                kp_list = [
+                    {"name": w.title(), "difficulty": 2, "tags": [f"freq={c}"]}
+                    for w, c in top
+                ]
+            else:
+                stem = filename.rsplit(".", 1)[0].strip()
                 kp_list = [{"name": stem[:40], "difficulty": 2, "tags": ["document"]}]
         _report("extracting_kp", 1, 1)
 
