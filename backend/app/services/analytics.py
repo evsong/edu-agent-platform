@@ -83,7 +83,11 @@ class AnalyticsService:
         if profile is None:
             bkt_states: dict[str, dict] = {}
             for kp in kps:
-                bkt_states[str(kp.id)] = {**DEFAULT_BKT_PARAMS, "name": kp.name}
+                bkt_states[str(kp.id)] = {
+                    **DEFAULT_BKT_PARAMS,
+                    "name": kp.name,
+                    "mastery": DEFAULT_BKT_PARAMS["probMastery"],
+                }
             profile = StudentProfile(
                 user_id=user_id,
                 course_id=course_id,
@@ -95,17 +99,30 @@ class AnalyticsService:
             await db.flush()
             return profile
 
-        # Merge newly-added KPs into existing profile
+        # Merge newly-added KPs into existing profile + backfill canonical
+        # `mastery` field so old rows (pre-linkage-fix) also get it.
         existing = dict(profile.bkt_states or {})
         changed = False
         for kp in kps:
             key = str(kp.id)
             if key not in existing:
-                existing[key] = {**DEFAULT_BKT_PARAMS, "name": kp.name}
+                existing[key] = {
+                    **DEFAULT_BKT_PARAMS,
+                    "name": kp.name,
+                    "mastery": DEFAULT_BKT_PARAMS["probMastery"],
+                }
                 changed = True
-            elif not existing[key].get("name"):
-                existing[key]["name"] = kp.name
-                changed = True
+            else:
+                if not existing[key].get("name"):
+                    existing[key]["name"] = kp.name
+                    changed = True
+                if "mastery" not in existing[key]:
+                    existing[key]["mastery"] = float(
+                        existing[key].get("probMastery")
+                        or existing[key].get("p_know")
+                        or 0.0
+                    )
+                    changed = True
         if changed:
             profile.bkt_states = existing
             await db.flush()
@@ -134,20 +151,30 @@ class AnalyticsService:
         if kp_str not in bkt_states:
             bkt_states[kp_str] = {**DEFAULT_BKT_PARAMS}
 
-        # Core BKT update
+        # Core BKT update (mutates probMastery in-place)
         bkt_update(bkt_states[kp_str], is_correct)
 
+        def _mastery_of(state: dict) -> float:
+            return float(
+                state.get("probMastery")
+                or state.get("p_know")
+                or state.get("mastery")
+                or 0.0
+            )
+
+        # Mirror the canonical `mastery` key onto every KP so frontends can
+        # read a single consistent field regardless of internal BKT naming.
+        for state in bkt_states.values():
+            state["mastery"] = _mastery_of(state)
+
         # Recalculate overall mastery
-        if bkt_states:
-            mastery_values = [s.get("p_know", s.get("probMastery", 0.3)) for s in bkt_states.values()]
-            overall_mastery = sum(mastery_values) / len(mastery_values)
-        else:
-            overall_mastery = 0.0
+        mastery_values = [_mastery_of(s) for s in bkt_states.values()]
+        overall_mastery = (
+            sum(mastery_values) / len(mastery_values) if mastery_values else 0.0
+        )
 
         # Determine risk level
-        min_mastery = min(
-            (s.get("p_know", s.get("probMastery", 0.3)) for s in bkt_states.values()), default=0.0
-        )
+        min_mastery = min(mastery_values, default=0.0)
         if min_mastery < 0.3:
             risk_level = "high"
         elif min_mastery < 0.5:
