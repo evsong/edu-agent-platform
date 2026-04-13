@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
@@ -19,9 +20,8 @@ import {
 import EnergyRing from "@/components/student/EnergyRing";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-
-/* ── Constants ── */
-const MATH_COURSE_ID = "00000000-0000-4000-b000-000000000001";
+import { fetchCourses } from "@/lib/queries";
+import { cn } from "@/lib/utils";
 
 /** Map backend KP external IDs to Chinese display names */
 const KP_NAMES: Record<string, string> = {
@@ -50,19 +50,25 @@ interface ProfileData {
 }
 
 interface BackendProfile {
-  bkt_states: Record<string, { p_know: number }>;
+  bkt_states: Record<string, { mastery?: number; p_know?: number; name?: string }>;
   overall_mastery: number;
   risk_level: string;
 }
 
 /** Transform backend BKT response → frontend ProfileData */
 function transformProfile(raw: BackendProfile): ProfileData {
-  const knowledge_points = Object.entries(raw.bkt_states)
-    .filter(([id]) => id in KP_NAMES)
+  const knowledge_points = Object.entries(raw.bkt_states || {})
     .map(([id, state]) => ({
-      name: KP_NAMES[id],
-      mastery: state.p_know,
-    }));
+      name: state.name || KP_NAMES[id] || id,
+      mastery: state.mastery ?? state.p_know ?? 0,
+    }))
+    // Deduplicate by name
+    .reduce<{ name: string; mastery: number }[]>((acc, kp) => {
+      const existing = acc.find((x) => x.name === kp.name);
+      if (!existing) acc.push(kp);
+      else if (kp.mastery > existing.mastery) existing.mastery = kp.mastery;
+      return acc;
+    }, []);
 
   return {
     knowledge_points,
@@ -108,16 +114,29 @@ const stagger = {
 
 export default function ProfilePage() {
   const { user } = useAuth();
+  const [selectedCourseId, setSelectedCourseId] = useState<string>("");
+
+  const { data: courses } = useQuery({
+    queryKey: ["courses"],
+    queryFn: fetchCourses,
+  });
+  const courseList = courses ?? [];
+
+  useEffect(() => {
+    if (!selectedCourseId && courseList.length > 0) {
+      setSelectedCourseId(courseList[0].id);
+    }
+  }, [courseList, selectedCourseId]);
 
   const { data: profile } = useQuery({
-    queryKey: ["student-profile", user?.id],
+    queryKey: ["student-profile", user?.id, selectedCourseId],
     queryFn: async () => {
       const raw = await apiFetch<BackendProfile>(
-        `/api/analytics/profile/${user!.id}?course_id=${MATH_COURSE_ID}`,
+        `/api/analytics/profile/${user!.id}?course_id=${selectedCourseId}`,
       );
       return transformProfile(raw);
     },
-    enabled: !!user?.id,
+    enabled: !!user?.id && !!selectedCourseId,
   });
 
   if (!profile) {
@@ -151,9 +170,32 @@ export default function ProfilePage() {
           能力画像
         </h1>
         <p className="mt-1 text-sm text-ink-text-muted">
-          你的学习数据与知识掌握概况
+          {courseList.find((c) => c.id === selectedCourseId)?.name
+            ? `${courseList.find((c) => c.id === selectedCourseId)?.name} · 你的学习数据与知识掌握概况`
+            : "你的学习数据与知识掌握概况"}
         </p>
       </div>
+
+      {/* Course tabs */}
+      {courseList.length > 1 && (
+        <div className="flex flex-wrap gap-2">
+          {courseList.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => setSelectedCourseId(c.id)}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                selectedCourseId === c.id
+                  ? "border-ink-primary bg-ink-primary text-white"
+                  : "border-ink-border bg-white text-ink-text hover:border-ink-primary/40",
+              )}
+            >
+              <i className={cn(c.icon || "ri-book-line", "text-sm")} />
+              {c.name}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Stats cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">

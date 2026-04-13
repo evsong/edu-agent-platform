@@ -152,11 +152,14 @@ export async function fetchKnowledgeGraph(courseId: string, documentId?: string)
   } as KnowledgeGraphData;
 }
 
-export function fetchSubmissions(assignmentId?: string) {
-  const id = assignmentId || "00000000-0000-4000-c000-000000000001";
+export function fetchSubmissions(assignmentId: string) {
   return apiFetch<Submission[]>(
-    `/api/assignments/${id}/submissions`,
+    `/api/assignments/${assignmentId}/submissions`,
   );
+}
+
+export function fetchAllSubmissions() {
+  return apiFetch<Submission[]>("/api/submissions/mine");
 }
 
 export async function fetchGradingDetail(submissionId: string): Promise<GradingDetail> {

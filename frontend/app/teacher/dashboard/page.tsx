@@ -146,7 +146,7 @@ export default function DashboardPage() {
     queryKey: ["teacher-courses"],
     queryFn: fetchCourses,
   });
-  const firstCourseId = courses?.[0]?.id || "00000000-0000-4000-b000-000000000001";
+  const firstCourseId = courses?.[0]?.id ?? "";
 
   const { data: overview } = useQuery({
     queryKey: ["stat-overview"],

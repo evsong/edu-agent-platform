@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { fetchSubmissions, submitAIGrading } from "@/lib/queries";
+import { fetchAllSubmissions as fetchSubmissionsAll, fetchSubmissions, submitAIGrading } from "@/lib/queries";
 import type { Submission } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
@@ -129,7 +129,7 @@ export default function GradingQueuePage() {
 
   const { data: submissions } = useQuery({
     queryKey: ["submissions"],
-    queryFn: () => fetchSubmissions(),
+    queryFn: () => fetchSubmissionsAll(),
   });
 
   const gradeMutation = useMutation({

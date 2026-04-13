@@ -234,7 +234,9 @@ export default function PracticePage() {
 
   // Current exercise: prefer API, show loading when unavailable
   const currentExercise = apiExercise ?? null;
-  const totalExercises = apiExercise ? answeredCount + 5 : 0;
+  // Fixed session target — 10 questions per practice session
+  const SESSION_TARGET = 10;
+  const totalExercises = SESSION_TARGET;
 
   /* ── Submit answer mutation ── */
   const answerMutation = useMutation({
@@ -370,8 +372,30 @@ export default function PracticePage() {
         </div>
       </motion.div>
 
-      {/* Practice card */}
-      {currentExercise ? (
+      {/* Practice card / completion */}
+      {answeredCount >= SESSION_TARGET ? (
+        <div className="rounded-xl border border-ink-success/30 bg-ink-success-light p-6 text-center">
+          <i className="ri-checkbox-circle-fill text-4xl text-ink-success" />
+          <h3 className="mt-3 text-lg font-heading font-semibold text-ink-text">
+            本轮练习完成
+          </h3>
+          <p className="mt-1 text-sm text-ink-text-muted">
+            你已完成 {answeredCount} 题，继续练习？
+          </p>
+          <button
+            onClick={() => {
+              setAnsweredCount(0);
+              setShowResult(false);
+              setLastResult(null);
+              fetchNextExercise();
+            }}
+            className="mt-4 inline-flex h-10 items-center gap-2 rounded-lg bg-ink-primary px-6 text-sm font-medium text-white hover:bg-ink-primary-dark"
+          >
+            <i className="ri-restart-line" />
+            再练一轮
+          </button>
+        </div>
+      ) : currentExercise ? (
         <PracticeCard
           key={currentExercise.id}
           question={currentExercise.question}
@@ -384,7 +408,7 @@ export default function PracticePage() {
           }
           onSubmit={handleSubmitAnswer}
           onNext={showResult ? handleNext : undefined}
-          current={answeredCount + 1}
+          current={Math.min(answeredCount + 1, SESSION_TARGET)}
           total={totalExercises}
         />
       ) : (
@@ -392,8 +416,6 @@ export default function PracticePage() {
           <p className="text-sm text-ink-text-muted">加载练习中...</p>
         </div>
       )}
-
-      {/* Completion message */}
     </motion.div>
   );
 }
