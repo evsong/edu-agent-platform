@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.models.exercise import Exercise
 from app.models.knowledge_point import KnowledgePoint
@@ -125,6 +126,7 @@ class AnalyticsService:
                     changed = True
         if changed:
             profile.bkt_states = existing
+            flag_modified(profile, "bkt_states")
             await db.flush()
         return profile
 
@@ -182,8 +184,10 @@ class AnalyticsService:
         else:
             risk_level = "low"
 
-        # Persist
+        # Persist — flag_modified is required because JSONB columns don't
+        # auto-detect nested dict mutations.
         profile.bkt_states = bkt_states
+        flag_modified(profile, "bkt_states")
         profile.overall_mastery = overall_mastery
         profile.risk_level = risk_level
         profile.last_active = datetime.now(timezone.utc)
