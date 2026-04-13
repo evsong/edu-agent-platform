@@ -84,8 +84,10 @@ export interface Course {
   name: string;
   description: string;
   student_count: number;
+  kp_count?: number;
   updated_at: string;
   icon?: string;
+  teacher_name?: string;
 }
 
 export interface AgentConfig {

@@ -47,6 +47,22 @@ export default function CourseDetailPage({
   });
   const students = studentsData?.students ?? [];
 
+  // Pending grading count for THIS course (filters teacher's full submissions list)
+  const { data: pendingForCourse } = useQuery({
+    queryKey: ["course-pending", id],
+    queryFn: async () => {
+      const all = await apiFetch<
+        { status: string; assignment_id: string; course_name?: string }[]
+      >("/api/submissions/mine");
+      return all.filter(
+        (s) =>
+          (s.status === "pending" || s.status === "submitted") &&
+          s.course_name === course?.name,
+      ).length;
+    },
+    enabled: !!course?.name,
+  });
+
   const [editName, setEditName] = useState("");
   const [editDesc, setEditDesc] = useState("");
 
@@ -155,7 +171,7 @@ export default function CourseDetailPage({
                 </div>
                 <div>
                   <p className="text-2xl font-heading font-bold text-ink-text">
-                    24
+                    {c.kp_count ?? 0}
                   </p>
                   <p className="text-xs text-ink-text-muted">知识点</p>
                 </div>
@@ -168,7 +184,7 @@ export default function CourseDetailPage({
                 </div>
                 <div>
                   <p className="text-2xl font-heading font-bold text-ink-text">
-                    18
+                    {pendingForCourse ?? 0}
                   </p>
                   <p className="text-xs text-ink-text-muted">待批改</p>
                 </div>
