@@ -1,16 +1,14 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import PracticeCard from "@/components/student/PracticeCard";
 import EnergyRing from "@/components/student/EnergyRing";
 import { useAuth } from "@/lib/auth";
 import { apiFetch } from "@/lib/api";
-
-/* ── Constants ── */
-
-const MATH_COURSE_ID = "00000000-0000-4000-b000-000000000001";
+import { fetchCourses } from "@/lib/queries";
+import { cn } from "@/lib/utils";
 
 /* ── Types ── */
 
@@ -168,11 +166,28 @@ export default function PracticePage() {
   const [answeredCount, setAnsweredCount] = useState(0);
   const [showResult, setShowResult] = useState(false);
   const [lastResult, setLastResult] = useState<AnswerResult | null>(null);
-  const [selectedCourse] = useState("高等数学 A");
+  const [selectedCourseId, setSelectedCourseId] = useState<string>("");
+
+  /* ── Fetch enrolled courses ── */
+  const { data: coursesData } = useQuery({
+    queryKey: ["courses"],
+    queryFn: fetchCourses,
+  });
+  const courses = coursesData ?? [];
+
+  // Default-select the first course once loaded
+  useEffect(() => {
+    if (!selectedCourseId && courses.length > 0) {
+      setSelectedCourseId(courses[0].id);
+    }
+  }, [courses, selectedCourseId]);
+
+  const selectedCourseName =
+    courses.find((c) => c.id === selectedCourseId)?.name ?? "";
 
   /* ── Fetch exercise from API ── */
   const { data: apiExercise, refetch: fetchNextExercise } = useQuery({
-    queryKey: ["practice-exercise"],
+    queryKey: ["practice-exercise", selectedCourseId],
     queryFn: async () => {
       const resp = await apiFetch<PracticeExerciseResponse>(
         "/api/practice/generate",
@@ -180,13 +195,13 @@ export default function PracticePage() {
           method: "POST",
           body: JSON.stringify({
             user_id: user!.id,
-            course_id: MATH_COURSE_ID,
+            course_id: selectedCourseId,
           }),
         },
       );
       return normalizeExercise(resp);
     },
-    enabled: !!user?.id,
+    enabled: !!user?.id && !!selectedCourseId,
     retry: false,
     staleTime: Infinity,
     refetchOnWindowFocus: false,
@@ -194,13 +209,13 @@ export default function PracticePage() {
 
   /* ── Fetch mastery profile ── */
   const { data: profile } = useQuery({
-    queryKey: ["practice-profile", user?.id],
+    queryKey: ["practice-profile", user?.id, selectedCourseId],
     queryFn: () =>
       apiFetch<{
         overall_mastery?: number;
         bkt_states?: Record<string, { mastery: number; name?: string }>;
-      }>(`/api/analytics/profile/${user!.id}?course_id=${MATH_COURSE_ID}`),
-    enabled: !!user?.id,
+      }>(`/api/analytics/profile/${user!.id}?course_id=${selectedCourseId}`),
+    enabled: !!user?.id && !!selectedCourseId,
   });
 
   // Derive knowledge points from profile, deduplicate by name (keep highest mastery)
@@ -228,7 +243,7 @@ export default function PracticePage() {
         method: "POST",
         body: JSON.stringify({
           user_id: user!.id,
-          course_id: MATH_COURSE_ID,
+          course_id: selectedCourseId,
           exercise_id: currentExercise!.id,
           answer,
         }),
@@ -284,7 +299,7 @@ export default function PracticePage() {
             智能练习
           </h1>
           <p className="mt-1 text-sm text-ink-text-muted">
-            {selectedCourse}
+            {selectedCourseName || "请选择课程"}
             {currentKP && (
               <span className="ml-2 inline-flex items-center rounded-full bg-ink-primary-lighter px-2 py-0.5 text-[10px] font-semibold text-ink-primary">
                 {currentKP.name}
@@ -299,6 +314,33 @@ export default function PracticePage() {
           </p>
         </div>
       </div>
+
+      {/* Course Selector */}
+      {courses.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {courses.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => {
+                if (c.id === selectedCourseId) return;
+                setSelectedCourseId(c.id);
+                setAnsweredCount(0);
+                setShowResult(false);
+                setLastResult(null);
+              }}
+              className={cn(
+                "inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-sm font-medium transition-colors",
+                selectedCourseId === c.id
+                  ? "border-ink-primary bg-ink-primary text-white shadow-sm shadow-ink-primary/20"
+                  : "border-ink-border bg-white text-ink-text hover:border-ink-primary/40 hover:bg-ink-primary-lighter/30",
+              )}
+            >
+              <i className={cn(c.icon || "ri-book-line", "text-base")} />
+              {c.name}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* BKT Energy Rings */}
       <motion.div
