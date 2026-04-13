@@ -471,15 +471,20 @@ class AnalyticsService:
         db: AsyncSession,
         user_id: uuid.UUID,
         course_id: uuid.UUID,
+        focus_kp_id: uuid.UUID | None = None,
     ) -> dict | None:
-        """Select or generate a practice exercise tailored to the student's weaknesses."""
+        """Select or generate a practice exercise tailored to the student's weaknesses.
+
+        If focus_kp_id is provided, the returned exercise is restricted to that
+        knowledge point; otherwise the weakest KP is chosen adaptively."""
         profile = await self.get_profile(db, user_id, course_id)
         bkt_states: dict = profile.bkt_states or {}
 
-        # Load exercises for this course
-        ex_result = await db.execute(
-            select(Exercise).where(Exercise.course_id == course_id)
-        )
+        # Load exercises for this course — optionally narrowed to a single KP
+        ex_query = select(Exercise).where(Exercise.course_id == course_id)
+        if focus_kp_id is not None:
+            ex_query = ex_query.where(Exercise.knowledge_point_id == focus_kp_id)
+        ex_result = await db.execute(ex_query)
         exercises = ex_result.scalars().all()
 
         # Load completed exercise IDs from xAPI
@@ -513,13 +518,21 @@ class AnalyticsService:
                 "source": "database",
             }
 
-        # Fallback: generate via LLM based on weakest KP
-        weakest_kp_id, weakest_mastery = None, 1.0
-        for kp_id, params in bkt_states.items():
-            m = params.get("p_know", params.get("probMastery", 0.3))
-            if m < weakest_mastery:
-                weakest_mastery = m
-                weakest_kp_id = kp_id
+        # Fallback: generate via LLM. If the caller specified a KP, honor it;
+        # otherwise adaptively pick the weakest KP from BKT state.
+        weakest_kp_id: str | None = None
+        weakest_mastery = 1.0
+        if focus_kp_id is not None:
+            weakest_kp_id = str(focus_kp_id)
+            weakest_mastery = bkt_states.get(weakest_kp_id, {}).get(
+                "p_know", bkt_states.get(weakest_kp_id, {}).get("probMastery", 0.3)
+            )
+        else:
+            for kp_id, params in bkt_states.items():
+                m = params.get("p_know", params.get("probMastery", 0.3))
+                if m < weakest_mastery:
+                    weakest_mastery = m
+                    weakest_kp_id = kp_id
 
         if weakest_kp_id is None:
             return None

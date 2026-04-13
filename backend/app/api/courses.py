@@ -327,3 +327,36 @@ async def list_students(
     ]
 
     return {"students": students}
+
+
+@router.get("/{course_id}/knowledge-points")
+async def list_course_knowledge_points(
+    course_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Return the knowledge points belonging to a course, ordered by name."""
+    # Verify course exists
+    course_result = await db.execute(select(Course).where(Course.id == course_id))
+    if course_result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Course not found",
+        )
+
+    kp_result = await db.execute(
+        select(KnowledgePoint)
+        .where(KnowledgePoint.course_id == course_id)
+        .order_by(KnowledgePoint.name)
+    )
+    kps = kp_result.scalars().all()
+    return {
+        "knowledge_points": [
+            {
+                "id": str(kp.id),
+                "name": kp.name,
+                "external_id": kp.external_id,
+                "difficulty": kp.difficulty,
+            }
+            for kp in kps
+        ]
+    }

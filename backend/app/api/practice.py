@@ -34,6 +34,7 @@ def _get_service() -> AnalyticsService:
 class GenerateRequest(BaseModel):
     user_id: uuid.UUID
     course_id: uuid.UUID
+    knowledge_point_id: uuid.UUID | None = None
 
 
 class AnswerRequest(BaseModel):
@@ -41,7 +42,6 @@ class AnswerRequest(BaseModel):
     course_id: uuid.UUID
     exercise_id: uuid.UUID
     answer: str
-    knowledge_point_id: uuid.UUID | None = None
     knowledge_point_id: uuid.UUID | None = None
 
 
@@ -55,7 +55,12 @@ async def generate_exercise(
 ):
     """Select or generate a practice exercise tailored to the student."""
     svc = _get_service()
-    exercise = await svc.select_exercise(db, payload.user_id, payload.course_id)
+    exercise = await svc.select_exercise(
+        db,
+        payload.user_id,
+        payload.course_id,
+        focus_kp_id=payload.knowledge_point_id,
+    )
     if exercise is None:
         return {
             "message": "All exercises mastered or no exercises available.",

@@ -214,6 +214,22 @@ export function fetchCourses() {
   return apiFetch<Course[]>("/api/courses");
 }
 
+export interface CourseKnowledgePoint {
+  id: string;
+  name: string;
+  external_id: string | null;
+  difficulty: number;
+}
+
+export async function fetchCourseKnowledgePoints(
+  courseId: string,
+): Promise<CourseKnowledgePoint[]> {
+  const res = await apiFetch<{ knowledge_points: CourseKnowledgePoint[] }>(
+    `/api/courses/${courseId}/knowledge-points`,
+  );
+  return res.knowledge_points;
+}
+
 export function fetchCourse(id: string) {
   return apiFetch<Course>(`/api/courses/${id}`);
 }

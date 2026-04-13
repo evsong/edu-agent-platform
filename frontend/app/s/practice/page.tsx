@@ -7,7 +7,7 @@ import PracticeCard from "@/components/student/PracticeCard";
 import EnergyRing from "@/components/student/EnergyRing";
 import { useAuth } from "@/lib/auth";
 import { apiFetch } from "@/lib/api";
-import { fetchCourses } from "@/lib/queries";
+import { fetchCourses, fetchCourseKnowledgePoints } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
 /* ── Types ── */
@@ -168,6 +168,8 @@ export default function PracticePage() {
   const [lastResult, setLastResult] = useState<AnswerResult | null>(null);
   const [selectedCourseId, setSelectedCourseId] = useState<string>("");
   const [sessionTarget, setSessionTarget] = useState<number>(10);
+  // "" == 自适应 (backend picks weakest KP); otherwise a specific KP uuid
+  const [selectedKpId, setSelectedKpId] = useState<string>("");
 
   /* ── Fetch enrolled courses ── */
   const { data: coursesData } = useQuery({
@@ -186,9 +188,17 @@ export default function PracticePage() {
   const selectedCourseName =
     courses.find((c) => c.id === selectedCourseId)?.name ?? "";
 
+  /* ── Fetch course knowledge points for chip selector ── */
+  const { data: courseKps } = useQuery({
+    queryKey: ["course-kps", selectedCourseId],
+    queryFn: () => fetchCourseKnowledgePoints(selectedCourseId),
+    enabled: !!selectedCourseId,
+  });
+  const courseKpList = courseKps ?? [];
+
   /* ── Fetch exercise from API ── */
   const { data: apiExercise, refetch: fetchNextExercise } = useQuery({
-    queryKey: ["practice-exercise", selectedCourseId],
+    queryKey: ["practice-exercise", selectedCourseId, selectedKpId],
     queryFn: async () => {
       const resp = await apiFetch<PracticeExerciseResponse>(
         "/api/practice/generate",
@@ -197,6 +207,7 @@ export default function PracticePage() {
           body: JSON.stringify({
             user_id: user!.id,
             course_id: selectedCourseId,
+            ...(selectedKpId ? { knowledge_point_id: selectedKpId } : {}),
           }),
         },
       );
@@ -331,6 +342,7 @@ export default function PracticePage() {
               onClick={() => {
                 if (c.id === selectedCourseId) return;
                 setSelectedCourseId(c.id);
+                setSelectedKpId("");
                 setAnsweredCount(0);
                 setShowResult(false);
                 setLastResult(null);
@@ -344,6 +356,54 @@ export default function PracticePage() {
             >
               <i className={cn(c.icon || "ri-book-line", "text-base")} />
               {c.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Knowledge point chips */}
+      {courseKpList.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-ink-text-muted">
+            知识点（共 {courseKpList.length}）：
+          </span>
+          <button
+            onClick={() => {
+              if (selectedKpId === "") return;
+              setSelectedKpId("");
+              setAnsweredCount(0);
+              setShowResult(false);
+              setLastResult(null);
+            }}
+            className={cn(
+              "inline-flex h-7 items-center gap-1 rounded-full border px-3 text-xs font-medium transition-colors",
+              selectedKpId === ""
+                ? "border-ink-primary bg-ink-primary text-white"
+                : "border-ink-border bg-white text-ink-text hover:border-ink-primary/40",
+            )}
+          >
+            <i className="ri-magic-line text-sm" />
+            自适应
+          </button>
+          {courseKpList.map((kp) => (
+            <button
+              key={kp.id}
+              onClick={() => {
+                if (selectedKpId === kp.id) return;
+                setSelectedKpId(kp.id);
+                setAnsweredCount(0);
+                setShowResult(false);
+                setLastResult(null);
+              }}
+              className={cn(
+                "inline-flex h-7 items-center rounded-full border px-3 text-xs font-medium transition-colors",
+                selectedKpId === kp.id
+                  ? "border-ink-primary bg-ink-primary text-white"
+                  : "border-ink-border bg-white text-ink-text hover:border-ink-primary/40",
+              )}
+              title={kp.name}
+            >
+              {kp.name}
             </button>
           ))}
         </div>
