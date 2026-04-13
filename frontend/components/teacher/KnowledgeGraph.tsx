@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,55 @@ const ForceGraph3D = dynamic(() => import("react-force-graph-3d"), {
     </div>
   ),
 });
+
+// Create a text sprite for node labels (always visible)
+function makeLabelSprite(text: string, color: string) {
+  if (typeof window === "undefined") return null;
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const THREE = require("three");
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  const fontSize = 28;
+  ctx.font = `bold ${fontSize}px -apple-system, "PingFang SC", sans-serif`;
+  const metrics = ctx.measureText(text);
+  const textWidth = metrics.width;
+  const padX = 14;
+  const padY = 10;
+  canvas.width = textWidth + padX * 2;
+  canvas.height = fontSize + padY * 2;
+  // Re-apply font after resizing
+  ctx.font = `bold ${fontSize}px -apple-system, "PingFang SC", sans-serif`;
+  // Background pill
+  ctx.fillStyle = "rgba(15, 23, 42, 0.85)";
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  const r = 10;
+  ctx.beginPath();
+  ctx.moveTo(r, 0);
+  ctx.lineTo(canvas.width - r, 0);
+  ctx.quadraticCurveTo(canvas.width, 0, canvas.width, r);
+  ctx.lineTo(canvas.width, canvas.height - r);
+  ctx.quadraticCurveTo(canvas.width, canvas.height, canvas.width - r, canvas.height);
+  ctx.lineTo(r, canvas.height);
+  ctx.quadraticCurveTo(0, canvas.height, 0, canvas.height - r);
+  ctx.lineTo(0, r);
+  ctx.quadraticCurveTo(0, 0, r, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  // Text
+  ctx.fillStyle = "#ffffff";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, padX, canvas.height / 2);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.minFilter = THREE.LinearFilter;
+  const material = new THREE.SpriteMaterial({ map: texture, depthTest: false });
+  const sprite = new THREE.Sprite(material);
+  const scale = 0.15;
+  sprite.scale.set(canvas.width * scale, canvas.height * scale, 1);
+  return sprite;
+}
 
 interface KnowledgeGraphProps {
   data: KnowledgeGraphData;
@@ -37,16 +86,16 @@ export default function KnowledgeGraph({ data }: KnowledgeGraphProps) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const graphRef = useRef<any>(null);
 
-  const filteredData = {
+  const filteredData = useMemo(() => ({
     nodes: data.nodes.map((n) => ({
       ...n,
       color: courseColorMap[n.course] || courseColorMap.default,
-      val: n.val || 4,
+      val: (n.val || 4) * 2, // enlarge dots for visibility
     })),
     links: data.links.map((l) => ({
       ...l,
     })),
-  };
+  }), [data]);
 
   const handleSearch = useCallback(
     (value: string) => {
@@ -114,10 +163,19 @@ export default function KnowledgeGraph({ data }: KnowledgeGraphProps) {
         nodeLabel="name"
         nodeColor="color"
         nodeVal="val"
-        linkColor={() => "rgba(148, 163, 184, 0.3)"}
+        nodeThreeObjectExtend={true}
+        nodeThreeObject={(node: Record<string, unknown>) => {
+          const n = node as { name: string; color: string };
+          return makeLabelSprite(n.name, n.color);
+        }}
+        linkColor={() => "rgba(99, 102, 241, 0.5)"}
+        linkOpacity={0.7}
         linkWidth={(link: Record<string, unknown>) =>
-          (link as { type?: string }).type === "prerequisite" ? 1.5 : 0.5
+          (link as { type?: string }).type === "prerequisite" ? 2 : 1
         }
+        linkDirectionalParticles={2}
+        linkDirectionalParticleWidth={1.5}
+        linkDirectionalParticleColor={() => "#a5b4fc"}
         enableNodeDrag={true}
         enableNavigationControls={true}
         numDimensions={is3D ? 3 : 2}

@@ -353,6 +353,7 @@ class KnowledgeService:
         edges: list[dict] = []
 
         # 1. Load KP nodes from PostgreSQL (authoritative)
+        kp_by_course: dict[str, list[dict]] = {}
         async with AsyncSessionLocal() as db:
             stmt = select(KPModel)
             if course_id:
@@ -365,13 +366,27 @@ class KnowledgeService:
             result = await db.execute(stmt)
             for kp in result.scalars().all():
                 nid = str(kp.id)
-                nodes_map[nid] = {
+                node = {
                     "id": nid,
                     "name": kp.name,
                     "course_id": str(kp.course_id),
                     "difficulty": kp.difficulty,
                     "group": str(kp.course_id),
                 }
+                nodes_map[nid] = node
+                kp_by_course.setdefault(str(kp.course_id), []).append(node)
+
+        # 1b. Generate synthetic "curriculum path" edges so the graph is not
+        # just floating dots. Chain KPs within each course by ascending
+        # difficulty, skipping self-loops.
+        for cid, kps in kp_by_course.items():
+            ordered = sorted(kps, key=lambda n: (n["difficulty"], n["name"]))
+            for a, b in zip(ordered, ordered[1:]):
+                edges.append({
+                    "source": a["id"],
+                    "target": b["id"],
+                    "type": "prerequisite",
+                })
 
         # 2. Enrich with Neo4j edges if the KPs also exist there
         try:
