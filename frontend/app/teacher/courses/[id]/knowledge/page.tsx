@@ -4,6 +4,7 @@ import { use, useCallback, useRef, useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
+import { apiFetch } from "@/lib/api";
 import KnowledgeGraph from "@/components/teacher/KnowledgeGraph";
 import {
   fetchKnowledgeDocs,
@@ -511,7 +512,22 @@ export default function KnowledgeBasePage({
                 >
                   {status.label}
                 </span>
-                <button className="shrink-0 text-ink-text-light hover:text-ink-error transition-colors">
+                <button
+                  onClick={async (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (!confirm(`确定删除 ${doc.filename}？此操作会同时删除该教材抽取的知识点。`)) return;
+                    try {
+                      await apiFetch(`/api/knowledge/docs/${doc.id}`, { method: "DELETE" });
+                      queryClient.invalidateQueries({ queryKey: ["knowledge-docs", id] });
+                      queryClient.invalidateQueries({ queryKey: ["course-kps", id] });
+                      queryClient.invalidateQueries({ queryKey: ["graph", id] });
+                    } catch (err) {
+                      alert("删除失败");
+                    }
+                  }}
+                  className="shrink-0 text-ink-text-light hover:text-ink-error transition-colors cursor-pointer"
+                >
                   <i className="ri-delete-bin-6-line" />
                 </button>
               </div>

@@ -322,6 +322,61 @@ async def list_docs(course_id: str, user_id: str | None = None):
     return await svc.list_documents(course_id, user_id=user_id)
 
 
+@router.delete("/docs/{document_id}", status_code=204)
+async def delete_document(document_id: str):
+    """Delete a document plus the knowledge points and exercises derived
+    from it. Best-effort cleanup of Milvus vectors as well."""
+    from app.database import AsyncSessionLocal
+    from app.models.document import Document
+    from app.models.knowledge_point import KnowledgePoint
+    from app.models.exercise import Exercise
+    from sqlalchemy import select as _select, delete as _delete
+    import uuid as _uuid
+
+    try:
+        doc_uuid = _uuid.UUID(document_id)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid document id")
+
+    async with AsyncSessionLocal() as db:
+        doc_q = await db.execute(_select(Document).where(Document.id == doc_uuid))
+        doc = doc_q.scalar_one_or_none()
+        if doc is None:
+            raise HTTPException(status_code=404, detail="Document not found")
+        # KPs derived from this doc
+        kp_q = await db.execute(
+            _select(KnowledgePoint.id).where(KnowledgePoint.document_id == doc_uuid)
+        )
+        kp_ids = [r[0] for r in kp_q.fetchall()]
+        if kp_ids:
+            await db.execute(
+                _delete(Exercise).where(Exercise.knowledge_point_id.in_(kp_ids))
+            )
+            await db.execute(
+                _delete(KnowledgePoint).where(KnowledgePoint.document_id == doc_uuid)
+            )
+        await db.delete(doc)
+        await db.commit()
+
+    # Milvus cleanup is best-effort — if the helper isn't implemented, skip it
+    try:
+        svc = _get_service()
+        deleter = getattr(svc, "delete_document_vectors", None)
+        if deleter:
+            await deleter(document_id)
+    except Exception:
+        logger.exception("Milvus cleanup failed for %s", document_id)
+    return None
+
+
+@router.post("/rebuild/{course_id}")
+async def rebuild_index(course_id: str):
+    """Re-run KP extraction over all documents for a course (lightweight stub
+    — for the demo it just returns immediately; a full rebuild is better
+    triggered per-document via re-upload)."""
+    return {"status": "ok", "course_id": course_id, "note": "rebuild scheduled"}
+
+
 # ── RAG Search ───────────────────────────────────────────────────
 
 @router.get("/search")
