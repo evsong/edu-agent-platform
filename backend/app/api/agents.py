@@ -24,6 +24,9 @@ async def get_active_agent(
     """Find the agent config for (course_id, agent_id). Returns the agent
     regardless of status — callers decide whether to skip stopped ones.
 
+    When a teacher accidentally creates multiple agents of the same type on
+    a course, we prefer a running one, otherwise fall back to any.
+
     `agent_id` examples: "qa" (chat), "grader" (AI grading), "tutor" (practice).
     """
     if isinstance(course_id, str):
@@ -37,7 +40,13 @@ async def get_active_agent(
             AgentConfig.agent_id == agent_id,
         )
     )
-    return result.scalar_one_or_none()
+    rows = result.scalars().all()
+    if not rows:
+        return None
+    for r in rows:
+        if r.status == "running":
+            return r
+    return rows[0]
 
 
 # ── Request / Response schemas ────────────────────────────────
