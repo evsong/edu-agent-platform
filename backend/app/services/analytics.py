@@ -616,7 +616,6 @@ class AnalyticsService:
                     },
                 ],
                 json_mode=True,
-                model=tutor_cfg.model if tutor_cfg else None,
                 temperature=tutor_cfg.temperature if tutor_cfg else None,
             )
             generated = json.loads(raw)

@@ -127,12 +127,14 @@ class QAAgent(BaseAgent):
         yield Thinking(stage="generating_answer")
 
         try:
+            # Note: agent_cfg.model is a friendly display name (e.g. "GPT-5.4")
+            # that the LLM proxy does not recognise as a model id, so we only
+            # forward temperature — the backend model is fixed per deployment.
             async for chunk in ctx.llm.stream(
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": message},
                 ],
-                model=agent_cfg.model if agent_cfg else None,
                 temperature=agent_cfg.temperature if agent_cfg else None,
             ):
                 yield TextDelta(content=chunk)

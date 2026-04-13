@@ -173,12 +173,12 @@ class GradingService:
         elif rules is None:
             rules = await self.get_grading_rules(course_id, db)
 
-        # Stage 2 — LLM call (per-course model + temperature if configured)
+        # Stage 2 — LLM call (per-course temperature if configured;
+        # model override is intentionally omitted — see qa_agent for context)
         messages = build_grading_prompt(paragraphs, rules, content_type=content_type)
         raw_response = await self.llm.chat(
             messages,
             json_mode=True,
-            model=agent_cfg.model if agent_cfg else None,
             temperature=agent_cfg.temperature if agent_cfg else None,
         )
 
