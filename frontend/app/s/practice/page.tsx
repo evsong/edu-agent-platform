@@ -412,7 +412,7 @@ export default function PracticePage() {
       {/* Session length selector */}
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs text-ink-text-muted">本轮目标：</span>
-        {[5, 10, 20].map((n) => (
+        {[5, 10, 20, 50].map((n) => (
           <button
             key={n}
             onClick={() => {
@@ -432,6 +432,27 @@ export default function PracticePage() {
             {n} 题
           </button>
         ))}
+        <div className="inline-flex h-7 items-center gap-1 rounded-full border border-ink-border bg-white px-3 text-xs text-ink-text">
+          <span className="text-ink-text-muted">自定义</span>
+          <input
+            type="number"
+            min={1}
+            max={500}
+            value={sessionTarget}
+            onChange={(e) => {
+              const v = parseInt(e.target.value, 10);
+              if (!Number.isFinite(v) || v < 1) return;
+              const clamped = Math.min(500, Math.max(1, v));
+              if (clamped === sessionTarget) return;
+              setSessionTarget(clamped);
+              setAnsweredCount(0);
+              setShowResult(false);
+              setLastResult(null);
+            }}
+            className="h-5 w-14 rounded bg-transparent px-1 text-center font-medium outline-none focus:ring-1 focus:ring-ink-primary/40"
+          />
+          <span className="text-ink-text-muted">题</span>
+        </div>
       </div>
 
       {/* BKT Energy Rings */}
