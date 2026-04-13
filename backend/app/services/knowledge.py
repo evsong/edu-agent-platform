@@ -86,20 +86,22 @@ class KnowledgeService:
     ) -> dict[str, Any]:
         """Chunk, embed, store in Milvus, then extract KPs into Neo4j."""
 
-        # 1. Split content into chunks
-        chunks = self._splitter.create_documents([content])
+        import asyncio
+
+        # 1. Split content into chunks (run in thread - can be slow for huge files)
+        chunks = await asyncio.to_thread(self._splitter.create_documents, [content])
         chunk_texts = [c.page_content for c in chunks]
         if not chunk_texts:
             return {"document_id": None, "chunk_count": 0, "knowledge_points_extracted": 0}
 
-        # 2. Embed all chunks
+        # 2. Embed all chunks (already async with to_thread inside)
         vectors = await self.llm.embed(chunk_texts)
 
-        # 3. Ensure Milvus collection exists
+        # 3. Ensure Milvus collection exists (sync call in thread)
         col_name = self._collection_name(course_id)
-        self._ensure_collection(col_name)
+        await asyncio.to_thread(self._ensure_collection, col_name)
 
-        # 4. Insert chunks + vectors
+        # 4. Insert chunks + vectors (sync milvus call in thread)
         doc_id = uuid.uuid4().hex
         rows = [
             {
@@ -110,7 +112,9 @@ class KnowledgeService:
             }
             for i in range(len(chunk_texts))
         ]
-        self.milvus.insert(collection_name=col_name, data=rows)
+        await asyncio.to_thread(
+            self.milvus.insert, collection_name=col_name, data=rows
+        )
 
         # 5. Extract knowledge points via LLM
         extraction_prompt = (

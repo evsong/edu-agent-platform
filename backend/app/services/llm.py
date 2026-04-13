@@ -159,13 +159,22 @@ class LLMClient:
         *,
         model: str | None = None,
     ) -> list[list[float]]:
-        """Batch-embed *texts* using local fastembed (384-d BGE model)."""
+        """Batch-embed *texts* using local fastembed (384-d BGE model).
+
+        Runs the blocking fastembed call in a thread pool to avoid
+        freezing the async event loop for large batches.
+        """
         if not texts:
             return []
-        try:
+        import asyncio
+
+        def _blocking_embed() -> list[list[float]]:
             fe = _get_fastembed()
             embeddings = list(fe.embed(texts))
             return [e.tolist() for e in embeddings]
+
+        try:
+            return await asyncio.to_thread(_blocking_embed)
         except Exception as e:
             logger.error("Embedding request failed: %s", e)
             raise RuntimeError(f"向量嵌入请求失败: {e}") from e
