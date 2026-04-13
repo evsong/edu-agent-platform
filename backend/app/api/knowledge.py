@@ -40,26 +40,37 @@ def _get_service() -> KnowledgeService:
     return _knowledge_service
 
 
-async def _extract_content(file_path: str, filename: str, ext: str) -> str:
-    """Extract text content from a file using markitdown or fallback."""
-    if ext in MARKITDOWN_EXTS:
-        try:
-            result = subprocess.run(
-                ["markitdown", file_path],
-                capture_output=True, text=True, timeout=600,
-            )
-            content = result.stdout.strip() if result.returncode == 0 else ""
-            if content:
-                return content
-            logger.warning(f"markitdown returned empty for {filename}: {result.stderr}")
-        except Exception as e:
-            logger.warning(f"markitdown error for {filename}: {e}")
-    # Fallback: UTF-8 decode
+def _run_markitdown_sync(file_path: str) -> tuple[str, str]:
+    """Blocking markitdown call — run in thread pool from async context."""
     try:
-        with open(file_path, "rb") as f:
-            return f.read().decode("utf-8", errors="ignore")
-    except Exception:
-        return ""
+        result = subprocess.run(
+            ["markitdown", file_path],
+            capture_output=True, text=True, timeout=600,
+        )
+        return (result.stdout.strip() if result.returncode == 0 else "",
+                result.stderr if result.returncode != 0 else "")
+    except Exception as e:
+        return ("", str(e))
+
+
+async def _extract_content(file_path: str, filename: str, ext: str) -> str:
+    """Extract text content from a file using markitdown or fallback.
+
+    Runs blocking subprocess in a thread pool to avoid freezing the event loop.
+    """
+    if ext in MARKITDOWN_EXTS:
+        content, err = await asyncio.to_thread(_run_markitdown_sync, file_path)
+        if content:
+            return content
+        logger.warning(f"markitdown returned empty for {filename}: {err}")
+    # Fallback: UTF-8 decode (run in thread in case of huge file)
+    def _read_text():
+        try:
+            with open(file_path, "rb") as f:
+                return f.read().decode("utf-8", errors="ignore")
+        except Exception:
+            return ""
+    return await asyncio.to_thread(_read_text)
 
 
 async def _process_file_background(task_id: str, course_id: str, filename: str, file_path: str):
