@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState, useMemo } from "react";
+import { useCallback, useRef, useState, useMemo, useEffect } from "react";
 import dynamic from "next/dynamic";
 // @ts-expect-error — three has no type declarations in this project
 import * as THREE from "three";
@@ -20,51 +20,65 @@ const ForceGraph3D = dynamic(() => import("react-force-graph-3d"), {
   ),
 });
 
-// Create a text sprite for node labels (always visible)
-function makeLabelSprite(text: string, color: string) {
-  if (typeof window === "undefined") return null;
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return null;
-  const fontSize = 28;
-  ctx.font = `bold ${fontSize}px -apple-system, "PingFang SC", sans-serif`;
-  const metrics = ctx.measureText(text);
-  const textWidth = metrics.width;
-  const padX = 14;
-  const padY = 10;
-  canvas.width = textWidth + padX * 2;
-  canvas.height = fontSize + padY * 2;
-  // Re-apply font after resizing
-  ctx.font = `bold ${fontSize}px -apple-system, "PingFang SC", sans-serif`;
-  // Background pill
-  ctx.fillStyle = "rgba(15, 23, 42, 0.85)";
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 2;
-  const r = 10;
-  ctx.beginPath();
-  ctx.moveTo(r, 0);
-  ctx.lineTo(canvas.width - r, 0);
-  ctx.quadraticCurveTo(canvas.width, 0, canvas.width, r);
-  ctx.lineTo(canvas.width, canvas.height - r);
-  ctx.quadraticCurveTo(canvas.width, canvas.height, canvas.width - r, canvas.height);
-  ctx.lineTo(r, canvas.height);
-  ctx.quadraticCurveTo(0, canvas.height, 0, canvas.height - r);
-  ctx.lineTo(0, r);
-  ctx.quadraticCurveTo(0, 0, r, 0);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-  // Text
-  ctx.fillStyle = "#ffffff";
-  ctx.textBaseline = "middle";
-  ctx.fillText(text, padX, canvas.height / 2);
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.minFilter = THREE.LinearFilter;
-  const material = new THREE.SpriteMaterial({ map: texture, depthTest: false });
-  const sprite = new THREE.Sprite(material);
-  const scale = 0.15;
-  sprite.scale.set(canvas.width * scale, canvas.height * scale, 1);
-  return sprite;
+// Create a text sprite for node labels (always visible).
+// Returns a THREE.Group containing the original sphere + a text label above it.
+function makeNodeObject(name: string, color: string, val: number) {
+  if (typeof window === "undefined" || !THREE) return undefined;
+  try {
+    const group = new THREE.Group();
+
+    // Sphere dot (replaces default - we use nodeThreeObjectExtend=false)
+    const radius = Math.max(3, Math.sqrt(val) * 1.5);
+    const geom = new THREE.SphereGeometry(radius, 16, 16);
+    const mat = new THREE.MeshBasicMaterial({ color });
+    const sphere = new THREE.Mesh(geom, mat);
+    group.add(sphere);
+
+    // Text label sprite above sphere
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return group;
+    const fontSize = 48;
+    ctx.font = `bold ${fontSize}px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif`;
+    const metrics = ctx.measureText(name);
+    const padX = 20;
+    const padY = 14;
+    canvas.width = Math.ceil(metrics.width) + padX * 2;
+    canvas.height = fontSize + padY * 2;
+    ctx.font = `bold ${fontSize}px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif`;
+    // Pill background
+    ctx.fillStyle = "rgba(15, 23, 42, 0.92)";
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3;
+    const r = 14;
+    ctx.beginPath();
+    ctx.roundRect(0, 0, canvas.width, canvas.height, r);
+    ctx.fill();
+    ctx.stroke();
+    // Text
+    ctx.fillStyle = "#ffffff";
+    ctx.textBaseline = "middle";
+    ctx.fillText(name, padX, canvas.height / 2);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.minFilter = THREE.LinearFilter;
+    texture.needsUpdate = true;
+    const sprMat = new THREE.SpriteMaterial({
+      map: texture,
+      depthTest: false,
+      transparent: true,
+    });
+    const sprite = new THREE.Sprite(sprMat);
+    const scale = 0.12;
+    sprite.scale.set(canvas.width * scale, canvas.height * scale, 1);
+    sprite.position.set(0, radius + 4, 0);
+    group.add(sprite);
+
+    return group;
+  } catch (e) {
+    console.error("makeNodeObject failed:", e);
+    return undefined;
+  }
 }
 
 interface KnowledgeGraphProps {
@@ -89,13 +103,22 @@ export default function KnowledgeGraph({ data }: KnowledgeGraphProps) {
   const filteredData = useMemo(() => ({
     nodes: data.nodes.map((n) => ({
       ...n,
-      color: courseColorMap[n.course] || courseColorMap.default,
-      val: (n.val || 4) * 2, // enlarge dots for visibility
+      color: courseColorMap[n.course] || "#6366F1",
+      val: (n.val || 4) * 3,
     })),
     links: data.links.map((l) => ({
       ...l,
     })),
   }), [data]);
+
+  // Auto zoom-to-fit once the force simulation has settled
+  useEffect(() => {
+    if (!filteredData.nodes.length) return;
+    const timers = [500, 1500, 3000].map(ms =>
+      setTimeout(() => graphRef.current?.zoomToFit?.(600, 80), ms),
+    );
+    return () => timers.forEach(clearTimeout);
+  }, [filteredData]);
 
   const handleSearch = useCallback(
     (value: string) => {
@@ -163,10 +186,10 @@ export default function KnowledgeGraph({ data }: KnowledgeGraphProps) {
         nodeLabel="name"
         nodeColor="color"
         nodeVal="val"
-        nodeThreeObjectExtend={true}
+        nodeThreeObjectExtend={false}
         nodeThreeObject={(node: Record<string, unknown>) => {
-          const n = node as { name: string; color: string };
-          return makeLabelSprite(n.name, n.color);
+          const n = node as { name: string; color: string; val: number };
+          return makeNodeObject(n.name, n.color, n.val);
         }}
         linkColor={() => "rgba(99, 102, 241, 0.5)"}
         linkOpacity={0.7}
