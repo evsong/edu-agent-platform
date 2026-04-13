@@ -55,7 +55,7 @@ export default function AgentsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState({ name: "", course_id: "", agent_id: "qa", model: "GPT-5.4", temperature: 0.3, knowledge_base: "", grading_rules: "", system_prompt: "", icon: "ri-robot-2-line" });
 
-  const { data: agents } = useQuery({
+  const { data: agents, isPending: agentsPending } = useQuery({
     queryKey: ["agents"],
     queryFn: fetchAgents,
   });
@@ -190,7 +190,14 @@ export default function AgentsPage() {
         )}
       </AnimatePresence>
 
-      {list.length === 0 && !showCreate && (
+      {agentsPending && (
+        <div className="rounded-xl border border-ink-border bg-white p-10 text-center text-sm text-ink-text-muted">
+          <i className="ri-loader-4-line animate-spin mr-1.5" />
+          加载 Agent 列表中...
+        </div>
+      )}
+
+      {!agentsPending && list.length === 0 && !showCreate && (
         <div className="rounded-xl border border-dashed border-ink-border bg-white p-10 text-center">
           <i className="ri-robot-2-line text-4xl text-ink-text-light" />
           <h3 className="mt-3 text-base font-heading font-semibold text-ink-text">
