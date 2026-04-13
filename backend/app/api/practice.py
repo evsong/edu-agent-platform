@@ -42,6 +42,7 @@ class AnswerRequest(BaseModel):
     exercise_id: uuid.UUID
     answer: str
     knowledge_point_id: uuid.UUID | None = None
+    knowledge_point_id: uuid.UUID | None = None
 
 
 # ── Endpoints ──────────────────────────────────────────────────────
@@ -87,22 +88,17 @@ async def submit_answer(
         payload.answer.strip().upper() == (exercise.answer or "").strip().upper()
     )
 
-    # Determine the knowledge point to update
+    # Determine the knowledge point to update — skip BKT if the exercise has none
     kp_id = payload.knowledge_point_id or exercise.knowledge_point_id
-    if kp_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No knowledge_point_id provided and exercise has none",
+    updated_profile = None
+    if kp_id is not None:
+        updated_profile = await svc.update_bkt(
+            db=db,
+            user_id=payload.user_id,
+            course_id=payload.course_id,
+            knowledge_point_id=kp_id,
+            is_correct=is_correct,
         )
-
-    # Update BKT
-    updated_profile = await svc.update_bkt(
-        db=db,
-        user_id=payload.user_id,
-        course_id=payload.course_id,
-        knowledge_point_id=kp_id,
-        is_correct=is_correct,
-    )
 
     # Record exercise completion
     await svc.record_xapi(
