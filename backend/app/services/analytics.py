@@ -478,15 +478,28 @@ class AnalyticsService:
         )
         profiles = profiles_q.scalars().all()
 
+        def _mastery_of(state: dict) -> float:
+            return float(
+                state.get("mastery")
+                or state.get("probMastery")
+                or state.get("p_know")
+                or 0.3
+            )
+
         result = []
         for kp in kps:
-            masteries = []
+            kp_id_str = str(kp.id)
+            masteries: list[float] = []
             for profile in profiles:
-                if profile.bkt_states and kp.external_id in profile.bkt_states:
-                    masteries.append(
-                        profile.bkt_states[kp.external_id].get("p_know", 0.5)
-                    )
-            avg = sum(masteries) / len(masteries) if masteries else 0.5
+                states = profile.bkt_states or {}
+                # Prefer UUID lookup (canonical), fall back to external_id
+                state = states.get(kp_id_str) or (
+                    states.get(kp.external_id) if kp.external_id else None
+                )
+                if state:
+                    masteries.append(_mastery_of(state))
+            # If no student has data for this KP, use the default init mastery
+            avg = sum(masteries) / len(masteries) if masteries else 0.3
             level = "high" if avg >= 0.7 else "low" if avg < 0.4 else "medium"
             result.append(
                 {"name": kp.name, "mastery": round(avg * 100, 1), "level": level}
