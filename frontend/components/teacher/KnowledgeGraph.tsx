@@ -2,6 +2,8 @@
 
 import { useCallback, useRef, useState, useMemo } from "react";
 import dynamic from "next/dynamic";
+// @ts-expect-error — three has no type declarations in this project
+import * as THREE from "three";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -21,8 +23,6 @@ const ForceGraph3D = dynamic(() => import("react-force-graph-3d"), {
 // Create a text sprite for node labels (always visible)
 function makeLabelSprite(text: string, color: string) {
   if (typeof window === "undefined") return null;
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const THREE = require("three");
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
