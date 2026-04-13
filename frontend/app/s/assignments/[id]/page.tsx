@@ -111,8 +111,9 @@ export default function AssignmentDetailPage({
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
-  // The /id/ may be either a submission UUID (graded) or an assignment UUID (pending).
-  // Look up the row in the student-assignments list to disambiguate.
+  // The /id/ may be either a submission UUID (graded/pending submission) or
+  // an assignment UUID (no submission yet). Look up the row in the
+  // student-assignments list to disambiguate.
   const { data: rows } = useQuery({
     queryKey: ["student-assignments-v2"],
     queryFn: () =>
@@ -127,18 +128,24 @@ export default function AssignmentDetailPage({
   });
   const row = rows?.find((r) => r.submission_id === id || r.assignment_id === id) ?? null;
 
+  // Speculative fetch: try /grading/result/{id} regardless of whether
+  // we've matched a row yet. If the id is a real submission and it has a
+  // grading result, this resolves and lets us render review mode even if
+  // the listing row hasn't loaded yet (or 404s out for unrelated reasons).
+  const { data: speculativeGrading } = useQuery({
+    queryKey: ["student-grading-detail", id],
+    queryFn: () => fetchGradingDetail(id),
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+
   const isGraded =
+    !!speculativeGrading?.score ||
     row?.status === "graded" ||
     row?.status === "ai_graded" ||
     row?.status === "teacher_graded";
 
-  const submissionId = row?.submission_id ?? null;
-
-  const { data: gradingDetail } = useQuery({
-    queryKey: ["student-grading-detail", submissionId],
-    queryFn: () => fetchGradingDetail(submissionId!),
-    enabled: !!submissionId && isGraded,
-  });
+  const gradingDetail = speculativeGrading;
 
   const handleSubmit = useCallback(async () => {
     if (!answer.trim() || !row) return;
