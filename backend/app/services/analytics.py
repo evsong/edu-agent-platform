@@ -557,10 +557,19 @@ class AnalyticsService:
         difficulty_int = {"basic": 1, "intermediate": 2, "advanced": 3}.get(difficulty, 1)
 
         # Persist the generated exercise so it has a real UUID and can be answered.
-        try:
-            kp_uuid_for_persist = uuid.UUID(weakest_kp_id) if weakest_kp_id else None
-        except (ValueError, TypeError):
-            kp_uuid_for_persist = None
+        # Only attach knowledge_point_id if the KP actually exists in the DB —
+        # bkt_states may reference stale/external IDs that would fail the FK check.
+        kp_uuid_for_persist: uuid.UUID | None = None
+        if weakest_kp_id:
+            try:
+                candidate = uuid.UUID(weakest_kp_id)
+                exists = await db.execute(
+                    select(KnowledgePoint.id).where(KnowledgePoint.id == candidate)
+                )
+                if exists.scalar_one_or_none() is not None:
+                    kp_uuid_for_persist = candidate
+            except (ValueError, TypeError):
+                pass
 
         persisted = Exercise(
             course_id=course_id,
