@@ -62,7 +62,10 @@ class AnalyticsService:
         user_id: uuid.UUID,
         course_id: uuid.UUID,
     ) -> StudentProfile:
-        """Load or create a student profile with default BKT params for each KP."""
+        """Load or create a student profile, ensuring bkt_states covers every
+        current course KP. New KPs added after the profile was created (e.g.
+        from a textbook import) get merged in with default params so the UI
+        can show the full landscape even before the student has practiced."""
         result = await db.execute(
             select(StudentProfile).where(
                 StudentProfile.user_id == user_id,
@@ -71,28 +74,41 @@ class AnalyticsService:
         )
         profile = result.scalar_one_or_none()
 
-        if profile is not None:
-            return profile
-
-        # Create with default BKT states for every KP in the course
+        # Load all current KPs for this course
         kp_result = await db.execute(
             select(KnowledgePoint).where(KnowledgePoint.course_id == course_id)
         )
         kps = kp_result.scalars().all()
 
-        bkt_states: dict[str, dict] = {}
-        for kp in kps:
-            bkt_states[str(kp.id)] = {**DEFAULT_BKT_PARAMS, "name": kp.name}
+        if profile is None:
+            bkt_states: dict[str, dict] = {}
+            for kp in kps:
+                bkt_states[str(kp.id)] = {**DEFAULT_BKT_PARAMS, "name": kp.name}
+            profile = StudentProfile(
+                user_id=user_id,
+                course_id=course_id,
+                bkt_states=bkt_states,
+                overall_mastery=0.0,
+                risk_level="normal",
+            )
+            db.add(profile)
+            await db.flush()
+            return profile
 
-        profile = StudentProfile(
-            user_id=user_id,
-            course_id=course_id,
-            bkt_states=bkt_states,
-            overall_mastery=0.0,
-            risk_level="normal",
-        )
-        db.add(profile)
-        await db.flush()
+        # Merge newly-added KPs into existing profile
+        existing = dict(profile.bkt_states or {})
+        changed = False
+        for kp in kps:
+            key = str(kp.id)
+            if key not in existing:
+                existing[key] = {**DEFAULT_BKT_PARAMS, "name": kp.name}
+                changed = True
+            elif not existing[key].get("name"):
+                existing[key]["name"] = kp.name
+                changed = True
+        if changed:
+            profile.bkt_states = existing
+            await db.flush()
         return profile
 
     # ── BKT Update ──────────────────────────────────────────────────

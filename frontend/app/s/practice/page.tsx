@@ -167,6 +167,7 @@ export default function PracticePage() {
   const [showResult, setShowResult] = useState(false);
   const [lastResult, setLastResult] = useState<AnswerResult | null>(null);
   const [selectedCourseId, setSelectedCourseId] = useState<string>("");
+  const [sessionTarget, setSessionTarget] = useState<number>(10);
 
   /* ── Fetch enrolled courses ── */
   const { data: coursesData } = useQuery({
@@ -234,9 +235,7 @@ export default function PracticePage() {
 
   // Current exercise: prefer API, show loading when unavailable
   const currentExercise = apiExercise ?? null;
-  // Fixed session target — 10 questions per practice session
-  const SESSION_TARGET = 10;
-  const totalExercises = SESSION_TARGET;
+  const totalExercises = sessionTarget;
 
   /* ── Submit answer mutation ── */
   const answerMutation = useMutation({
@@ -350,6 +349,31 @@ export default function PracticePage() {
         </div>
       )}
 
+      {/* Session length selector */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs text-ink-text-muted">本轮目标：</span>
+        {[5, 10, 20].map((n) => (
+          <button
+            key={n}
+            onClick={() => {
+              if (n === sessionTarget) return;
+              setSessionTarget(n);
+              setAnsweredCount(0);
+              setShowResult(false);
+              setLastResult(null);
+            }}
+            className={cn(
+              "inline-flex h-7 items-center rounded-full border px-3 text-xs font-medium transition-colors",
+              sessionTarget === n
+                ? "border-ink-primary bg-ink-primary text-white"
+                : "border-ink-border bg-white text-ink-text hover:border-ink-primary/40",
+            )}
+          >
+            {n} 题
+          </button>
+        ))}
+      </div>
+
       {/* BKT Energy Rings */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
@@ -379,7 +403,7 @@ export default function PracticePage() {
       </motion.div>
 
       {/* Practice card / completion */}
-      {answeredCount >= SESSION_TARGET ? (
+      {answeredCount >= sessionTarget ? (
         <div className="rounded-xl border border-ink-success/30 bg-ink-success-light p-6 text-center">
           <i className="ri-checkbox-circle-fill text-4xl text-ink-success" />
           <h3 className="mt-3 text-lg font-heading font-semibold text-ink-text">
@@ -414,7 +438,7 @@ export default function PracticePage() {
           }
           onSubmit={handleSubmitAnswer}
           onNext={showResult ? handleNext : undefined}
-          current={Math.min(answeredCount + 1, SESSION_TARGET)}
+          current={Math.min(answeredCount + 1, sessionTarget)}
           total={totalExercises}
         />
       ) : (
