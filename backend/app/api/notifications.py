@@ -141,7 +141,7 @@ async def list_notifications(
             pending_q = await db.execute(
                 select(Submission, Assignment, User)
                 .join(Assignment, Assignment.id == Submission.assignment_id)
-                .join(User, User.id == Submission.user_id)
+                .join(User, User.id == Submission.student_id)
                 .where(
                     Assignment.course_id.in_(owned_ids),
                     Submission.status.in_(["submitted", "pending"]),
