@@ -40,12 +40,19 @@ export default function CourseDetailPage({
 
   const queryClient = useQueryClient();
 
+  // Shared cache with /teacher/courses/[id]/knowledge — both must return the
+  // same shape (a plain array). Previously one returned `{ students }` and the
+  // other returned `[]`, so back-nav handed the wrong shape to the next page.
   const { data: studentsData } = useQuery({
     queryKey: ["course-students", id],
-    queryFn: () =>
-      apiFetch<{ students: typeof mockStudents }>(`/api/courses/${id}/students`),
+    queryFn: async () => {
+      const res = await apiFetch<{ students: typeof mockStudents }>(
+        `/api/courses/${id}/students`,
+      );
+      return res.students ?? [];
+    },
   });
-  const students = studentsData?.students ?? [];
+  const students = studentsData ?? [];
 
   // Pending grading count for THIS course (filters teacher's full submissions list)
   const { data: pendingForCourse } = useQuery({
