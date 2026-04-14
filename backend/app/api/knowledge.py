@@ -326,7 +326,7 @@ async def list_docs(course_id: str, user_id: str | None = None):
 async def delete_document(document_id: str):
     """Delete a document plus the knowledge points and exercises derived
     from it. Best-effort cleanup of Milvus vectors as well."""
-    from app.database import AsyncSessionLocal
+    from app.database import async_session
     from app.models.document import Document
     from app.models.knowledge_point import KnowledgePoint
     from app.models.exercise import Exercise
@@ -338,7 +338,7 @@ async def delete_document(document_id: str):
     except (TypeError, ValueError):
         raise HTTPException(status_code=400, detail="Invalid document id")
 
-    async with AsyncSessionLocal() as db:
+    async with async_session() as db:
         doc_q = await db.execute(_select(Document).where(Document.id == doc_uuid))
         doc = doc_q.scalar_one_or_none()
         if doc is None:
