@@ -187,6 +187,7 @@ export default function DashboardPage() {
   const stats = overview ?? {
     active_students: 0,
     active_students_trend: [],
+    active_students_trend_delta: 0,
     qa_accuracy: 0,
     qa_accuracy_delta: 0,
     warning_count: 0,
@@ -222,7 +223,10 @@ export default function DashboardPage() {
           icon="ri-user-heart-line"
           color="primary"
           sparkline={stats.active_students_trend}
-          trend={{ direction: "up", label: "较上周 +8%" }}
+          trend={{
+            direction: (stats.active_students_trend_delta ?? 0) >= 0 ? "up" : "down",
+            label: `${(stats.active_students_trend_delta ?? 0) >= 0 ? "+" : ""}${stats.active_students_trend_delta ?? 0}% 7天`,
+          }}
         />
         <StatCard
           title="答疑正确率"

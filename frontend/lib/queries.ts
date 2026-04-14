@@ -8,6 +8,7 @@ import { apiFetch } from "@/lib/api";
 export interface StatOverview {
   active_students: number;
   active_students_trend: number[];
+  active_students_trend_delta?: number;
   qa_accuracy: number;
   qa_accuracy_delta: number;
   warning_count: number;

@@ -449,9 +449,41 @@ class AnalyticsService:
             row[0][0] if row[0] else "?" for row in warning_students_q.all()
         ]
 
+        # 6. 7-day active-student trend: distinct users with any xAPI row per day
+        from datetime import datetime, timedelta, timezone
+        from sqlalchemy import cast, Date
+
+        now = datetime.now(timezone.utc)
+        start = (now - timedelta(days=6)).replace(hour=0, minute=0, second=0, microsecond=0)
+        trend_q = await db.execute(
+            select(
+                cast(XAPIStatement.timestamp, Date).label("day"),
+                func.count(func.distinct(XAPIStatement.user_id)).label("n"),
+            )
+            .where(XAPIStatement.timestamp >= start)
+            .group_by("day")
+            .order_by("day")
+        )
+        trend_by_day = {row.day.isoformat(): int(row.n) for row in trend_q.all()}
+        active_students_trend = []
+        for i in range(7):
+            day = (start + timedelta(days=i)).date().isoformat()
+            active_students_trend.append(trend_by_day.get(day, 0))
+
+        # Trend delta: % change first day → last day (avoid div/0)
+        first = active_students_trend[0]
+        last = active_students_trend[-1]
+        if first > 0:
+            trend_delta = round((last - first) / first * 100, 1)
+        elif last > 0:
+            trend_delta = 100.0
+        else:
+            trend_delta = 0.0
+
         return {
             "active_students": active_students,
-            "active_students_trend": [active_students] * 7,
+            "active_students_trend": active_students_trend,
+            "active_students_trend_delta": trend_delta,
             "qa_accuracy": qa_accuracy,
             "qa_accuracy_delta": 2.1,
             "warning_count": warning_count,

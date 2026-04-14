@@ -18,6 +18,8 @@ from app.api.platform import router as platform_router
 from app.api.agents import router as agents_router
 from app.api.courses import router as courses_router
 from app.api.assignments import router as assignments_router
+from app.api.notifications import router as notifications_router
+from app.api.settings import router as settings_router
 
 # Import agent modules to trigger @AgentRegistry.register() decorators
 import app.agents.qa_agent  # noqa: F401
@@ -98,6 +100,8 @@ app.include_router(platform_router)
 app.include_router(agents_router)
 app.include_router(courses_router)
 app.include_router(assignments_router)
+app.include_router(notifications_router)
+app.include_router(settings_router)
 
 
 @app.get("/health")
