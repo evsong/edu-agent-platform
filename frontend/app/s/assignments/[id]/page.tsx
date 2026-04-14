@@ -113,7 +113,8 @@ export default function AssignmentDetailPage({
 
   // The /id/ may be either a submission UUID (graded/pending submission) or
   // an assignment UUID (no submission yet). Look up the row in the
-  // student-assignments list to disambiguate.
+  // student-assignments list to disambiguate. Keep the same raw-row shape as
+  // the list page so the shared cache doesn't confuse the two consumers.
   const { data: rows } = useQuery({
     queryKey: ["student-assignments-v2"],
     queryFn: () =>
@@ -124,6 +125,9 @@ export default function AssignmentDetailPage({
         assignment_title: string;
         course_name: string;
         description: string | null;
+        due_date: string | null;
+        score: number | null;
+        submitted_at: string | null;
       }[]>("/api/student/assignments"),
   });
   const row = rows?.find((r) => r.submission_id === id || r.assignment_id === id) ?? null;

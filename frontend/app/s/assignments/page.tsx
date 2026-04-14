@@ -171,29 +171,27 @@ interface StudentAssignmentRow {
 }
 
 export default function AssignmentsPage() {
-  const { data: assignments, isPending, isFetching } = useQuery({
+  // Shared query key with the detail page (`/s/assignments/[id]`). Both consume
+  // the same raw-row shape so React Query doesn't hand one page the other's
+  // transformed cache, which previously caused a 500ms flash where `title` was
+  // undefined and rows fell back to course name. Mapping to display shape
+  // happens inline during render.
+  const { data: rows, isPending, isFetching } = useQuery({
     queryKey: ["student-assignments-v2"],
-    queryFn: async () => {
-      const data = await apiFetch<StudentAssignmentRow[]>("/api/student/assignments");
-      return data
-        // Skip rows that are missing a title so we never render an
-        // "untitled" or duplicated row during a refetch flash.
-        .filter((s) => s.assignment_title && s.assignment_title.trim().length > 0)
-        .map((s): StudentAssignment => ({
-          // Use submission_id when present so click-through opens grading detail;
-          // otherwise use assignment_id so we can render the submit form.
-          id: s.submission_id ?? s.assignment_id,
-          title: s.assignment_title,
-          course_name: s.course_name,
-          course_icon: deriveCourseIcon(s.course_name),
-          due_date: s.due_date || s.submitted_at || new Date().toISOString(),
-          status: (s.status as StudentAssignment["status"]) || "pending",
-          score: s.score ?? undefined,
-        }));
-    },
+    queryFn: () => apiFetch<StudentAssignmentRow[]>("/api/student/assignments"),
   });
 
-  const list = assignments ?? [];
+  const list: StudentAssignment[] = (rows ?? [])
+    .filter((s) => s.assignment_title && s.assignment_title.trim().length > 0)
+    .map((s) => ({
+      id: s.submission_id ?? s.assignment_id,
+      title: s.assignment_title,
+      course_name: s.course_name,
+      course_icon: deriveCourseIcon(s.course_name),
+      due_date: s.due_date || s.submitted_at || new Date().toISOString(),
+      status: (s.status as StudentAssignment["status"]) || "pending",
+      score: s.score ?? undefined,
+    }));
   const pendingCount = list.filter(
     (a) => a.status === "pending" || a.status === "overdue",
   ).length;
