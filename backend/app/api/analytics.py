@@ -116,6 +116,80 @@ async def get_profile(
             if isinstance(params, dict) and "name" not in params:
                 params["name"] = kp_map.get(kp_id, kp_id)
 
+    # Derive real stats + 7-day history from xapi_statements so the
+    # frontend stops showing mock numbers.
+    from app.models.xapi_statement import XAPIStatement
+    from datetime import datetime, timedelta, timezone
+    from sqlalchemy import func, cast, Date
+
+    now = datetime.now(timezone.utc)
+    seven_days_ago = now - timedelta(days=6)
+
+    # Scope xapi rows to this user AND this course (context.course_id)
+    course_filter = XAPIStatement.context["course_id"].as_string() == str(course_id)
+    base_q = select(XAPIStatement).where(
+        XAPIStatement.user_id == user_id,
+        course_filter,
+    )
+
+    # total interactions = every chat "asked" + every exercise "completed"
+    total_q = await db.execute(
+        select(func.count()).select_from(
+            base_q.where(
+                XAPIStatement.verb.in_(["asked", "completed", "answered"])
+            ).subquery()
+        )
+    )
+    total_interactions = int(total_q.scalar() or 0)
+
+    # practice sessions = distinct days on which user completed an exercise
+    sessions_q = await db.execute(
+        select(func.count(func.distinct(cast(XAPIStatement.timestamp, Date)))).where(
+            XAPIStatement.user_id == user_id,
+            course_filter,
+            XAPIStatement.verb == "completed",
+            XAPIStatement.object_type == "exercise",
+        )
+    )
+    practice_sessions = int(sessions_q.scalar() or 0)
+
+    # daily avg result_score over last 7 days
+    history_q = await db.execute(
+        select(
+            cast(XAPIStatement.timestamp, Date).label("day"),
+            func.avg(XAPIStatement.result_score).label("avg_score"),
+        )
+        .where(
+            XAPIStatement.user_id == user_id,
+            course_filter,
+            XAPIStatement.result_score.is_not(None),
+            XAPIStatement.timestamp >= seven_days_ago,
+        )
+        .group_by("day")
+        .order_by("day")
+    )
+    history_rows = {
+        row.day.isoformat(): float(row.avg_score or 0) for row in history_q.all()
+    }
+
+    current_mastery_pct = round(float(profile.overall_mastery or 0) * 100)
+    # Fill 7 days, forward-filling the last known value; default to current mastery
+    mastery_history = []
+    last_value = current_mastery_pct
+    for i in range(7):
+        day = (seven_days_ago + timedelta(days=i)).date().isoformat()
+        if day in history_rows:
+            last_value = round(history_rows[day] * 100)
+        date_label = (seven_days_ago + timedelta(days=i)).strftime("%m/%d")
+        mastery_history.append({"date": date_label, "mastery": last_value})
+
+    # Improvement = first vs last day of the window
+    first_val = mastery_history[0]["mastery"] if mastery_history else current_mastery_pct
+    last_val = mastery_history[-1]["mastery"] if mastery_history else current_mastery_pct
+    improvement_rate = round(
+        ((last_val - first_val) / first_val * 100) if first_val > 0 else 0, 1
+    )
+
     return {
         "user_id": str(profile.user_id),
         "course_id": str(profile.course_id),
@@ -123,6 +197,12 @@ async def get_profile(
         "overall_mastery": profile.overall_mastery,
         "risk_level": profile.risk_level,
         "last_active": profile.last_active.isoformat() if profile.last_active else None,
+        "stats": {
+            "total_interactions": total_interactions,
+            "practice_sessions": practice_sessions,
+            "improvement_rate": improvement_rate,
+        },
+        "mastery_history": mastery_history,
     }
 
 

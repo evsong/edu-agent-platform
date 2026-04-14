@@ -53,6 +53,12 @@ interface BackendProfile {
   bkt_states: Record<string, { mastery?: number; p_know?: number; name?: string }>;
   overall_mastery: number;
   risk_level: string;
+  stats?: {
+    total_interactions: number;
+    practice_sessions: number;
+    improvement_rate: number;
+  };
+  mastery_history?: { date: string; mastery: number }[];
 }
 
 /** Transform backend BKT response → frontend ProfileData */
@@ -62,7 +68,6 @@ function transformProfile(raw: BackendProfile): ProfileData {
       name: state.name || KP_NAMES[id] || id,
       mastery: state.mastery ?? state.p_know ?? 0,
     }))
-    // Deduplicate by name
     .reduce<{ name: string; mastery: number }[]>((acc, kp) => {
       const existing = acc.find((x) => x.name === kp.name);
       if (!existing) acc.push(kp);
@@ -72,40 +77,14 @@ function transformProfile(raw: BackendProfile): ProfileData {
 
   return {
     knowledge_points,
-    mastery_history: mockProfile.mastery_history, // history not in this endpoint
-    stats: mockProfile.stats, // stats not in this endpoint
+    mastery_history: raw.mastery_history ?? [],
+    stats: raw.stats ?? {
+      total_interactions: 0,
+      practice_sessions: 0,
+      improvement_rate: 0,
+    },
   };
 }
-
-/* ── Mock data ── */
-
-const mockProfile: ProfileData = {
-  knowledge_points: [
-    { name: "导数定义", mastery: 0.85 },
-    { name: "复合函数求导", mastery: 0.72 },
-    { name: "微分近似", mastery: 0.45 },
-    { name: "中值定理", mastery: 0.28 },
-    { name: "极限运算", mastery: 0.91 },
-    { name: "不定积分", mastery: 0.65 },
-    { name: "定积分", mastery: 0.58 },
-    { name: "数列求和", mastery: 0.38 },
-    { name: "三角恒等", mastery: 0.76 },
-    { name: "概率统计", mastery: 0.52 },
-  ],
-  mastery_history: Array.from({ length: 7 }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() - 6 + i);
-    return {
-      date: `${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}`,
-      mastery: Math.round(52 + i * 2.5 + Math.sin(i) * 3),
-    };
-  }),
-  stats: {
-    total_interactions: 347,
-    practice_sessions: 28,
-    improvement_rate: 12.5,
-  },
-};
 
 const stagger = {
   hidden: {},
