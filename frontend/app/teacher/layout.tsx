@@ -83,8 +83,9 @@ export default function TeacherLayout({
           <Sidebar />
         </div>
 
-        {/* Main content */}
-        <div className="flex-1 md:ml-[200px]">
+        {/* Main content — min-w-0 is required so flex children with intrinsic
+            wide content (tables, charts) don't blow the viewport width on mobile. */}
+        <div className="min-w-0 flex-1 md:ml-[200px]">
           {/* Mobile header */}
           <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-ink-border bg-white/80 px-4 backdrop-blur-md md:px-6">
             {/* Mobile logo + hamburger area */}
